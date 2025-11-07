@@ -72,7 +72,7 @@ graph TB
     style H fill:#f0e1ff
 ```
 
-*Figure 1: WAP Architecture - [Technical Details](https://github.com/midearth-labs/web-agent-protocol/blob/main/first-draft/technical-design.md)*
+*Figure 1: WAP Architecture - [Technical Details](https://github.com/midearth-labs/web-agent-protocol/blob/main/v0/technical-design.md)*
 
 ## WAP: The Cooperative Alternative
 
@@ -166,7 +166,7 @@ sequenceDiagram
     Note over User,Todo_API: All operations use standard REST APIs<br/>within the same browser security context
 ```
 
-*Figure 2: Multi-step Orchestrator Mode workflow - [See Full Todo Example](https://github.com/midearth-labs/web-agent-protocol/blob/main/first-draft/todo-management-example.md)*
+*Figure 2: Multi-step Orchestrator Mode workflow - [See Full Todo Example](https://github.com/midearth-labs/web-agent-protocol/blob/main/v0/todo-management-example.md)*
 
 **What happened:**
 1. Agent parsed the natural language into structured filters
@@ -199,7 +199,7 @@ Best for: Page-specific interactions like filtering search results, filling form
 
 *Example:* "Filter these products by size M and sort by price low to high"
 
-[See Amazon Search CoPilot Example](https://github.com/midearth-labs/web-agent-protocol/blob/main/first-draft/amazon-copilot-example.md)
+[See Amazon Search CoPilot Example](https://github.com/midearth-labs/web-agent-protocol/blob/main/v0/amazon-copilot-example.md)
 
 ### 2. **Orchestrator Mode**
 Natural language → Multi-step API workflows across the entire site
@@ -247,7 +247,7 @@ graph LR
     style F fill:#2196F3,color:#fff
 ```
 
-*Figure 3: WAP's Comprehensive Solution - [See Detailed Comparison](https://github.com/midearth-labs/web-agent-protocol/blob/main/first-draft/solutions-comparison.md)*
+*Figure 3: WAP's Comprehensive Solution - [See Detailed Comparison](https://github.com/midearth-labs/web-agent-protocol/blob/main/v0/solutions-comparison.md)*
 
 ### Security: Inheriting the Browser's Security Model
 
@@ -308,7 +308,7 @@ Amazon can curate the same carefully designed experience they've spent decades p
 
 ## Adoption: Progressive and Pragmatic
 
-[See Detailed Adoption Strategy](https://github.com/midearth-labs/web-agent-protocol/blob/main/first-draft/adoption-strategy.md)
+[See Detailed Adoption Strategy](https://github.com/midearth-labs/web-agent-protocol/blob/main/v0/adoption-strategy.md)
 
 ### No Permission Required
 
@@ -437,13 +437,13 @@ I believe cooperation beats conflict. WAP is the cooperative path.
 
 **Related Resources:**
 
-- [Complete Technical Specification](https://github.com/midearth-labs/web-agent-protocol/blob/main/first-draft/technical-design.md)
-- [Todo Management Example (Full Implementation)](https://github.com/midearth-labs/web-agent-protocol/blob/main/first-draft/todo-management-example.md)
-- [Amazon CoPilot Mode Example](https://github.com/midearth-labs/web-agent-protocol/blob/main/first-draft/amazon-copilot-example.md)
-- [WAP vs. Current Solutions (Detailed Comparison)](https://github.com/midearth-labs/web-agent-protocol/blob/main/first-draft/solutions-comparison.md)
-- [Adoption Strategy & Economics](https://github.com/midearth-labs/web-agent-protocol/blob/main/first-draft/adoption-strategy.md)
-- [Security Model Deep Dive](https://github.com/midearth-labs/web-agent-protocol/blob/main/first-draft/security-model.md)
-- [Interactive Demo](https://github.com/midearth-labs/web-agent-protocol/blob/main/first-draft/live-demo.md)
+- [Complete Technical Specification](https://github.com/midearth-labs/web-agent-protocol/blob/main/v0/technical-design.md)
+- [Todo Management Example (Full Implementation)](https://github.com/midearth-labs/web-agent-protocol/blob/main/v0/todo-management-example.md)
+- [Amazon CoPilot Mode Example](https://github.com/midearth-labs/web-agent-protocol/blob/main/v0/amazon-copilot-example.md)
+- [WAP vs. Current Solutions (Detailed Comparison)](https://github.com/midearth-labs/web-agent-protocol/blob/main/v0/solutions-comparison.md)
+- [Adoption Strategy & Economics](https://github.com/midearth-labs/web-agent-protocol/blob/main/v0/adoption-strategy.md)
+- [Security Model Deep Dive](https://github.com/midearth-labs/web-agent-protocol/blob/main/v0/security-model.md)
+- [Interactive Demo](https://github.com/midearth-labs/web-agent-protocol/blob/main/v0/live-demo.md)
 
 **References:**
 
