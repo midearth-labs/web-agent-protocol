@@ -1,112 +1,79 @@
-# WAP: A Safe, Cooperative Path to Agentic Browsing
+# WAP: Bringing Natural Language to the Web for all
 
-*A new approach to Agentic Browsing that enables website owners and users both win when AI agents respect the web's paradigm and security model*
+*A cooperative protocol that makes every website conversational - no new browser or software required*
 
+![WAP Browser Experience](./assets/wap-shopping-app-1.png "WAP Browser Experience")
 ---
 
-The race for agentic browsers is heating up. OpenAI launched [ChatGPT Atlas](https://openai.com/index/introducing-chatgpt-atlas/), Perplexity shipped [Comet](https://www.perplexity.ai/comet), and Amazon is [fighting back](https://www.aboutamazon.com/news/company-news/amazon-perplexity-comet-statement) against what they see as deception/degraded customer experiences. There's a fundamental problem with the current approaches: these solutions are **adversarial to website owners** and create **serious security vulnerabilities, and privacy concerns** for users.
+## The Evolution of Web Interaction
 
-What if there was a better way? One that respects website owners, protects users, and actually works reliably?
+The web has evolved through distinct interaction paradigms:
 
-Enter **WAP (Web Agent Protocol)** - a draft specification that enables safe, secure, privacy-enabled agentic browsing by having websites expose their functionality as discoverable, invokable tools for the WAP AI agent.
+**1990s: Document Navigation** - Click links, read pages  
+**2000s: Interactive Applications** - Forms, AJAX, rich web apps  
+**2010s: Mobile-First & Responsive** - Touch interfaces, app-like experiences  
+**2020s: The Conversational Web** - Natural language as a major contender.
 
-## The Problem With Current Agentic Browsers
+We're entering an era where users expect to interact with websites the way they interact with AI assistants - through natural conversation. Instead of hunting through menus, filling out forms, and clicking through multi-step workflows, users want to simply ask for what they need.
 
-Current agentic browsers like Comet and Atlas use **DOM manipulation and accessibility tree parsing** to automate web interactions. They build models from the Document Object Model and perform actions by simulating clicks, form fills, and navigation - essentially treating every website as an uncooperative partner to be automated around. They also attempt to perform complex multi-site operations which then introduce a lot of security and privacy challenges.  
+**"Find me a 30 lbs dumbbell with very good rating, my budget is max $100"**
 
-The current approach creates three critical problems:
+**"Push all incomplete todos due this week to next Monday, except anything with 'urgent'"**
 
-### 1. Security
+This isn't science fiction - it's the logical next step in web evolution. Just as chatbots became ubiquitous on websites over the past decade, **agentic interfaces** are becoming the new standard for web interaction.
 
-Atlas's "agent mode" allows ChatGPT to operate browsers semi-autonomously with access to browsing context, seeing every open tab, interacting with forms, clicking buttons, taking screenshots, and navigating between pages. Combined with "browser memories" that log websites and activities, the AI builds detailed understanding of users' digital lives.
+### What Makes This Possible Now?
 
-[Brave Security's research](https://brave.com/blog/comet-prompt-injection/) revealed that Comet is vulnerable to **prompt injection attacks across domains**:
+Three converging technologies:
 
-> "When an AI assistant follows malicious instructions from untrusted webpage content, traditional protections such as same-origin policy (SOP) or cross-origin resource sharing (CORS) are all effectively useless. The AI operates with the user's full privileges across authenticated sessions, providing potential access to banking accounts, corporate systems, private emails, cloud storage, and other services."
+1. **Large Language Models** - Understanding natural language intent with high accuracy
+2. **Function Calling / Tool Use** - LLMs that can invoke structured APIs reliably
+3. **Modern Web APIs** - Most sites already have JSON APIs powering their SPAs
 
-Imagine visiting a seemingly innocent shopping site that contains invisible instructions directing the AI agent to scrape personal data from all your open tabs - your medical portal, draft emails, banking information. The AI can't distinguish between legitimate instructions from the user and malicious instructions embedded in web content.
+The question isn't *if* users/websites will adopt conversational interfaces - it's *how* it can be done safely, reliably, and at scale.
 
-### 2. Unreliability
+## Introducing WAP (Web Agent Protocol)
 
-Comet relies on DOM and accessibility trees, which means it cannot interact with images, icons, or SVG elements that lack proper labels or ARIA attributes. It also cannot access cross-origin iframes.
+WAP is a lightweight protocol that brings natural language interfaces to any website - **no browser extensions, no new software, no complex integrations.**
 
-The web is messy. Many sites don't follow accessibility best practices. Complex SPAs use custom components that don't map cleanly to semantic HTML. The result? Automation that works beautifully on well-structured sites but fails unpredictably on the real web.
+Think of it like the chatbot widgets you already see on thousands of websites. Except instead of just answering questions, WAP-enabled sites let users accomplish actual tasks through conversation.
 
-[A technical analysis of Comet](https://www.harness.io/blog/reverse-engineering-comet) demonstrated this limitation - it failed to click on unlabeled cart icons and struggled with elements that weren't properly marked up in the accessibility tree.
+### How It Works (The Simple Version)
 
-### 3. Adversarial to Website Owners
+![WAP Orchestration Experience](./assets/wap-shopping-app-2.png "WAP Orchestration Experience")
 
-Amazon's recent statement about Perplexity's Comet highlights a crucial concern:
+*Figure 1: WAP Orchestrator Flow - Simple and Familiar*
 
-> "We prioritize making browsing easy for customers and our [customer-obsessed innovation] is what has led to transformational products over the last three decades..."
+**Three ingredients:**
 
-Website owners invest millions in building curated experiences, conversion funnels, upselling strategies, and monetization. DOM-scraping agents bypass all of this, potentially:
-- Eliminating ad revenue
-- Breaking analytics and A/B testing
-- Bypassing rate limiting and abuse protection
-- Degrading carefully designed user experiences
-- Removing sponsored content and recommendations
+1. **A manifest file** - Website publishes `/.well-known/wap.json` declaring what it can do
+2. **The WAP Engine** - A simple injectable JavaScript library (like Google Analytics or Stripe)
+2. **The Websites Inference Endpoint** - A simple wrapper around LLM calls for Agentic planning
+3. **Agent mode** - Activated via URL parameter or button click
 
-**This is why adoption will be slow.** Major platforms like Amazon, Netflix, and banking institutions will actively resist these approaches through technical countermeasures.
-### 4. Privacy: Your Data Leaves the Browser
+That's it. No browser changes needed. No vendor approvals required. Just like how chatbots spread organically, WAP can too.
 
-When you use Comet or Atlas in agent mode, **your requests and supporting context are sent to third-party servers** - Perplexity's and OpenAI's infrastructure respectively.
+### It's Just Like Chatbots... But Better
 
-Consider this natural language request:
-> "Search for romantic hotels in Napa Valley for December 14-16, 2025. Our budget is around $500/night. Also, my partner loves wine tasting - can you find wineries that offer private tours?"
+If you've integrated a chatbot widget (Intercom, Drift, etc.) on your website, you already understand the WAP model:
 
-**What you intended:** Share travel preferences with hotel booking sites to get personalized results.
+| Aspect | Chatbot Widgets | WAP |
+|--------|----------------|-----|
+| **Installation** | Add script tag | Add script tag |
+| **User Activation** | Click chat icon | Click agent button or use `?agentmode=1` |
+| **Data Flow** | User -> Your server -> Response | User -> Your server -> Response |
+| **Session** | Uses existing cookies | Uses existing cookies |
+| **Security** | Your domain's security model | Your domain's security model |
+| **Control** | You decide what it can do | You decide what it can do |
+| **Presentation** | You decide how it displays | You decide how it displays |
 
-**What actually happens:** This personal information - your travel dates, budget, partner's preferences, romantic occasion details - is transmitted to Perplexity's or OpenAI's servers for processing before ever reaching the hotel site.
+The key difference? Chatbots typically just answer questions. WAP agents can **take action** - search products, update settings, complete transactions, manage data.
 
-According to [Perplexity's privacy FAQ](https://www.perplexity.ai/comet/resources/articles/comet-data-privacy-security-faq-s) and [OpenAI's Atlas data controls](https://help.openai.com/en/articles/12574142-chatgpt-atlas-data-controls-and-privacy), this data could be used for:
-- Model inference and improvement
-- Training future models (unless explicitly opted out)
-- And kept for 30-day retention periods
+### A Real Example: Todo Management
 
-**The prompt injection risk multiplies:** Not only can malicious websites manipulate the AI's behavior, but with the right techniques, attackers can potentially trick the agent into revealing sensitive information from your browsing context that was meant for completely different sites.
+Here's what a simple Todo app looks like with WAP:
 
-## WAP: The Cooperative Alternative
-
-WAP takes a fundamentally different approach: **websites voluntarily expose their functionality as tools that AI agents can call.** This will help deliver a more simple, reliable and secure experience.
-
-```mermaid
-graph TB
-    A[User: Natural Language Input] --> B[WAP Engine]
-    B --> C[Discover Available Tools from /.well-known/wap.json]
-    C --> D[Parse Intent with Website Model Endpoint]
-    E[Execute tools, confirmations step-by-step] --> E
-    E --> F[Gather Responses]
-    F --> G[Render Response]
-    G --> H[User: See Results]
-    
-```
-
-*Figure 1: WAP Architecture - [Technical Details](./technical-design.md)*
-
-### No New Software Required
-
-Here's a critical difference: **you don't need to download yet another browser or software** to get natural language and agentic features.
-
-WAP meets users where they already are:
-- **Your current browser** - Chrome, Safari, Firefox, Edge, whatever you use today
-- **Your current device** - Desktop, mobile, tablet, even smart TVs
-- **Your current platform** - Mac, Windows, Linux, iOS, Android
-
-Just like a chatbot widget doesn't replace your website or redirect you elsewhere, WAP doesn't either. It's an **enhanced experience layer** that activates when you want it.
-
-**For users:** Visit `https://amazon.ca?agentmode=1` and your familiar Amazon experience gains natural language superpowers. All your cookies, history, saved preferences, and logged-in session remain intact.
-
-**For enterprises:** Adopt incrementally and on your terms. Start with one feature, expand at your pace. Your customers use your site exactly how they always have - with an optional natural language interface available when they want it.
-
-Atlas and Comet ask users to abandon their existing browser and adopt new software. WAP asks nothing of users and gives enterprises full control of the rollout.
-
-### How It Works
-
-**Step 1: Discovery**
-
-Websites publish a manifest at `/.well-known/wap.json` that declares their capabilities:
-
+**1. Publish a manifest** (`/.well-known/wap.json`):
 ```json
 {
   "name": "TodoApp",
@@ -114,9 +81,7 @@ Websites publish a manifest at `/.well-known/wap.json` that declares their capab
   "tools": [
     {
       "name": "listTodos",
-      "type": "server",
-      "endpoint": "/api/todos",
-      "method": "GET",
+      "tags": ["readonly", "paginated"],
       "parameters": {
         "filter": {
           "status": ["initial", "complete", "due"],
@@ -127,98 +92,142 @@ Websites publish a manifest at `/.well-known/wap.json` that declares their capab
     },
     {
       "name": "updateTodo",
-      "type": "server",
-      "endpoint": "/api/todos/{id}",
-      "method": "PUT"
+      "tags": ["mutating"],
+      "parameters": {
+        "id": "string"
+      }
     }
   ]
 }
 ```
 
-**Step 2: Agent Activation**
+**2. User activates agent mode:**  
+Visits `https://todoapp.com?agentmode=1`
 
-Users trigger agent mode, maybe by clicking a button, or via say (e.g., `amazon.com?agentmode=1`) while remaining in their familiar browser context with full session continuity.
-
-**Step 3: Natural Language Orchestration**
-
-The user gives a natural language command. The AI agent:
-1. Discovers available tools from the manifest
-2. Parses intent from user request
-3. Plans a sequence of tool calls
-4. Executes them with user confirmation when needed
-5. Presents results
-
-### Real-World Example: Task Rescheduling
-
-Let's see WAP in action with a real multi-step workflow.
-
-**User Command:**
+**3. User types:**  
 > "Push all incomplete todos due this week to next Monday, except anything with 'urgent'"
+
+**4. WAP Engine executes:**
+- Discovers `listTodos` and `updateTodo` tools
+- Calls `listTodos` with filters
+- Confirms with user: "Found 3 todos to reschedule"
+- Executes `updateTodo` for each item
+- Reports: "Rescheduled 3 todos to Monday, Dec 16"
+
 ![Todo Agentic Execution](./assets/wap-todo-screenshot.png "Todo Agentic Execution")
 
+*Figure 2: Multi-step workflow executed through natural language - [See Full Implementation](./todo-management-example.md)*
 
-*Figure 2: Multi-step Orchestrator Mode workflow - [See Full Todo Example](./todo-management-example.md)*
+No DOM parsing. No computer vision. No accessibility tree navigation. Just clean API calls and website functionality dynamically orchestrated by natural language.
 
-**What happened:**
-1. Agent parsed the natural language into structured filters
-2. Called `listTodos()` with specific criteria
-3. Received an array of matching todo objects
-4. Confirmed with User
-5. Executed `updateTodo()` for each item
-6. Reported results back to the user
+## Two Modes for Different Needs
 
-**Traditional approach:** The agent would need to:
-- Navigate to the todo page
-- Parse the visual layout
-- Guess which elements are todos
-- Simulate clicks on each checkbox/button
-- Hope nothing breaks
+WAP supports two interaction patterns:
 
-**WAP approach:** 
-- Direct API calls
-- Structured data
-- Predictable results
-- Fast execution
+### CoPilot Mode
+Natural language operates on the current page's UI elements.
 
-## WAP's Two Operating Modes
+**Best for:** Filtering, sorting, form filling - interactions within a single page context.
 
-WAP supports two distinct modes of operation:
+**Example:** On Amazon's search page  
+*User:* "Show me 30lb dumbbells under $100 with 4+ stars"  
+*Agent:* Applies filters directly to the page's search interface
 
-### 1. **CoPilot Mode** 
-Natural language → UI operations within current page/component context
+### Orchestrator Mode
+Natural language triggers multi-step API workflows across the entire site.
 
-Best for: Page-specific interactions like filtering search results, filling forms, or navigating single-page components.
+**Best for:** Complex tasks requiring multiple API calls, data transformations, or cross-functional operations.
 
-*Example:* "Find me a 30 lbs dumbbell with very good rating, my budget is max $100"
+**Example:** Ordering  
+*User:* "Reorder everything from my last order. If any items' price has increased, ask me for confirmation. Use my rewards balance to pay if enough, otherwise, use my credit card." 
+*Agent:* Calls orders API -> Filters results -> Calls Product API -> Ask Confirmation -> Add to car -> Calls payments API
 
-[See Amazon Search CoPilot Example](./amazon-copilot-example.md)
+Sites can implement either or both modes depending on their needs.
 
-### 2. **Orchestrator Mode**
-Natural language → Multi-step API workflows across the entire site
+## Why This Will Succeed
 
-Best for: Complex tasks requiring multiple API calls, state management, and cross-functional operations.
+### 1. Zero Friction Adoption
 
-*Example:* "Find all orders from last quarter, export to CSV, and download"
+**For websites:**
+- Add one script tag
+- Publish one JSON manifest
+- Deploy Inference LLM Wrapper endpoint.
+- Enable agent mode
 
-## Why WAP Addresses Every Major Concern
+**For users:**
+- Use their current browser
+- Stay on the familiar website
+- Website automatically gains natural language (text  and speech) interactions
+- All existing sessions/cookies preserved
+
+### 2. Progressive Enhancement
+
+Start small, expand over time:
+
+**Phase 1:** Enable natural language for your most common workflow (product search, order lookup)  
+**Phase 2:** Add more capabilities incrementally  
+**Phase 3:** Full conversational interface across your entire site
+
+No big-bang rewrite needed.
+
+### 3. Economic Alignment
+
+**Website owners win:**
+- Differentiation ("AI-Ready")
+- Better UX without losing control
+- Maintain monetization and analytics
+- Future-proof as conversational interfaces become standard
+
+**Users win:**
+- Faster task completion
+- Lower cognitive load
+- Natural interaction model
+
+**Platforms win:**
+- Competitive advantage
+- New analytics and insights
+- Happy customers on both sides
+
+### 4. Platform Leverage
+
+If Shopify implements WAP, **every Shopify store** gets conversational interfaces automatically. Same with WooCommerce, Squarespace, Webflow, etc.
+
+## Key Design Principles
+
+WAP is built on these core principles:
+
+### 1. Cooperative, Not Adversarial
+Websites voluntarily expose functionality. They maintain control over their experience, data, and monetization.
+
+### 2. Secure by Default
+WAP inherits the browser's existing security model - same-origin policy, CORS, CSRF protection, content security policies. No new attack surfaces.
+
+### 3. Privacy Preserving
+Your data flows directly from you to the website - just like filling a form manually. No third-party AI providers intercept your information.
+
+### 4. Reliable
+Structured APIs with explicit contracts mean predictable, testable behavior. No brittle DOM parsing or computer vision guesswork.
+
+### 5. Performant
+Direct API calls are 5-10x faster than alternatives that require page navigation, visual processing, and DOM manipulation.
 
 ```mermaid
 graph LR
-    A[WAP Protocol] --> B[Security]
-    A --> C[Reliability]
-    A --> D[Performance]
-    A --> E[Privacy]
-    A --> F[Monetization]
+    A[WAP Design Principles] --> B[Cooperative]
+    A --> C[Secure]
+    A --> D[Private]
+    A --> E[Reliable]
+    A --> F[Fast]
     
-    B --> B1[Inherits browser security model<br/>Same-origin policy<br/>CORS respected<br/>No prompt injection across domains<br/>Respects content security policies]
+    B --> B1[Sites opt-in<br/>Full control maintained<br/>Monetization preserved]
     
-    C --> C1[Structured APIs<br/>Explicit contracts<br/>No DOM parsing<br/>Rendering according to directives]
+    C --> C1[Same-origin policy<br/>CORS respected<br/>No new attack surface]
     
-    D --> D1[Direct API calls<br/>No vision processing<br/>Parallel/Batch execution]
+    D --> D1[Direct site communication<br/>No third-party intercept<br/>Existing session model]
     
-    E --> E1[User's session/cookies<br/>No new auth flow<br/>Standard web privacy, Data is not shared with any other party]
+    E --> E1[Explicit API contracts<br/>Structured data<br/>Predictable behavior]
     
-    F --> F1[Sites control experience<br/>Can include ads/upsells<br/>Analytics preserved]
+    F --> F1[Direct API calls<br/>No DOM processing<br/>Parallel execution]
     
     style A fill:#4CAF50,color:#fff
     style B fill:#2196F3,color:#fff
@@ -228,213 +237,99 @@ graph LR
     style F fill:#2196F3,color:#fff
 ```
 
-*Figure 3: WAP's Comprehensive Solution - [See Detailed Comparison](./solutions-comparison.md)*
+*Figure 3: WAP's Core Architecture*
 
-### Security: Inheriting the Browser's Security Model
+## The Current Landscape
 
-**The Problem with Atlas/Comet:**
-Malicious code on one website could influence AI behavior across multiple tabs - a script on a shopping site could trick the AI agent into switching to an open banking tab and submitting a transfer form.
+While WAP represents a cooperative approach to agentic web interaction, it's worth understanding the alternatives emerging in the market.
 
-**WAP's Solution:**
-- All API calls are same-origin requests
-- Uses the user's existing cookies and session
-- CORS already handled
-- CSRF tokens managed by the site
-- No cross-domain prompt injection possible
-- Content Security Policy respected
-- WAP does not execute/eval random code, only calls website owner defined APIs or client-side code
+### Other Approaches to Agentic Browsing
 
-The site executes its own code in its own context. If a site wanted to be malicious, it could do so in normal browsing mode already. WAP adds no new attack surface.
+Several companies have launched agentic browsers that use **DOM automation** - analyzing web pages visually and simulating user clicks:
 
-### Reliability: Explicit Contracts
+- **ChatGPT Atlas** (OpenAI) - Browser integration with AI automation
+- **Perplexity Comet** - AI-powered browsing assistant
+- Various browser extensions and automation tools
 
-**The Problem with DOM Automation:**
-Agents must guess intent from visual layouts, handle accessibility tree inconsistencies, and cope with constantly changing DOM structures.
+These solutions share a common architecture: they parse the Document Object Model (DOM) or accessibility tree and automate interactions by simulating human behavior.
 
-**WAP's Solution:**
-Websites explicitly declare their capabilities. The agent knows exactly what's possible and how to invoke each function. No guessing, no vision processing, no brittle selectors. As the website declares all their tools [input and output parameters and examples](https://www.anthropic.com/engineering/writing-tools-for-agents), the definition makes Agentic AI smarter in goal planning and execution, and error handling. 
+### The Fundamental Tradeoffs
 
-### Performance: Direct API Calls
+The DOM automation approach has significant implications:
 
-**The Problem with Automation:**
-Navigate pages → Parse DOM → Extract data → Simulate interactions → Wait for responses → Repeat
+**Security Concerns:**  
+DOM-based agents are vulnerable to prompt injection attacks. Brave Security's research showed how malicious content on one website can influence AI behavior across all open tabs - a script on a shopping site could potentially manipulate the agent into accessing banking tabs or private emails. Traditional web security boundaries (same-origin policy, CORS) don't apply when an AI operates with full user privileges across domains.
 
-**WAP's Solution:**
-Call API → Get structured JSON → Done
+**Privacy Implications:**  
+These solutions send your requests and browsing context to third-party AI providers. Your natural language input ("find romantic hotels in Napa for December 14-16, budget $500/night") is transmitted to the AI company's servers before reaching the intended website. According to their privacy policies, this data may be retained for up to 30 days and used for model training.
 
-Typically 5-10x faster than DOM automation approaches.
+**Reliability Challenges:**  
+DOM automation depends on visual parsing and accessibility trees. It fails on improperly labeled elements, complex SPAs, or custom components. It cannot interact with images, icons, or SVG elements lacking proper ARIA attributes. Also, because they do not understand the functionality of websites as intended by the owner, they involve guess-work and exploration, whereas WAP can be more targeted.
 
-### Privacy: Standard Web Model
+**Website Owner Friction:**  
+Sites invest heavily in curated experiences, conversion funnels, and monetization. DOM scraping bypasses ads, breaks analytics, and removes sponsored content. Amazon's [public response to Perplexity](https://www.aboutamazon.com/news/company-news/amazon-perplexity-comet-statement) highlights this tension - major platforms will resist approaches that undermine their business models.
 
-**The Problem with Agentic Browsers:**
-Your natural language requests and browsing context are transmitted to third-party AI providers (Perplexity, OpenAI) before reaching the intended website. Personal information meant for a hotel booking site is shared with the AI company's servers, stored for model training, and potentially vulnerable to prompt injection attacks that could leak data across sites.
+### Why WAP Takes a Different Path
 
-According to their own documentation:
-- Comet sends your personal search requests and some page context to Perplexity's servers for processing
-- Atlas transmits browsing context to OpenAI's infrastructure
-- They may retain this data for up to 30 days
-- They may use it for model training unless you opt out
-- "Browser memories" create comprehensive behavioral profiles
+WAP addresses these concerns through cooperative design:
 
-**WAP's Solution:**
-- Your natural language input is processed within the website's own infrastructure
-- Information goes directly from you to the intended website - just like filling out a form manually
-- No additional AI providers intercept your data
-- Uses the user's existing session
-- No new authentication flow
-- No additional tracking beyond what the site already does
-- User remains in control of their browser privacy settings
-- Data never leaves the trust boundary you've already established with the website
+**Security:** Same-origin API calls using existing browser security model. No cross-domain prompt injection possible. 
 
-### Monetization: Sites Stay in Control
+**Privacy:** Data flows directly from user to website, never through third-party AI servers. Uses your existing session and cookies.
 
-**The Problem with DOM Scraping:**
-Sites lose control over user experience, can't serve ads, lose analytics data, and have no way to present sponsored content or upsells.
+**Reliability:** Explicit API contracts with structured data. No DOM parsing, no visual interpretation, no accessibility tree dependencies.
 
-**WAP's Solution:**
-In Orchestrator mode, the website defines the response schema. They can include:
-- Sponsored products in search results
-- Upsell recommendations in cart responses
-- Ads in appropriate contexts
-- Custom rendering for brand control
+**Alignment:** Website owners control the experience, maintain monetization, and preserve analytics. They can include ads, upsells, and sponsored content in agent responses.
 
-Amazon for example, can curate the same carefully designed experience they've spent decades perfecting - just delivered via natural language instead of clicks.
+The tradeoff? WAP requires site adoption. But we believe **opt-in cooperation leads to sustainable, long-term success** versus an adversarial arms race.
 
-In CoPilot mode, nothing even changes, all existing website experience stays the same.
+## Known Limitations
 
-## Adoption: Progressive and Pragmatic
+WAP is intentionally scoped for practical adoption:
 
-[See Detailed Adoption Strategy](./adoption-strategy.md)
+**Single-Domain Focus:** WAP agents work within one website at a time. Cross-domain orchestration introduces massive complexity (authentication, payment flows, API coordination, security boundaries). Users can complete tasks on Site A, then move to Site B - just like browsing today.
 
-### No Permission Required
+**Requires Manifest:** Sites must publish WAP manifests to participate. This is slower than adversarial automation but ensures security, reliability, and business model preservation.
 
-WAP doesn't need browser vendor approval or W3C standardization to launch. Like Google Analytics, Stripe, or OAuth, it can succeed through grassroots adoption:
-
-1. **NPM Package**: `npm install wap-engine`
-2. **Site Integration**: Add `<script src="wap-engine.js"></script>`
-3. **Create Manifest**: Publish `/.well-known/wap.json`
-4. **Enable Agent Mode**: Users trigger with a button or via `?agentmode=1`
-
-Done. No browser changes, no vendor buy-in needed upfront.
-
-### Progressive Enhancement
-
-Sites can adopt incrementally:
-
-**Phase 1: Single Feature**
-Amazon starts with just order search in CoPilot mode.
-- Users can query orders in natural language
-- Limited manifest, easy to test
-- Learn from real usage
-
-**Phase 2: Core Journeys**
-Add shopping cart, checkout, product search in Orchestrator mode
-- Most common user flows now available
-- Still manageable scope
-
-**Phase 3: Full Integration**
-Complete API coverage across the site
-- Account management, wish lists, subscriptions
-- Full agentic experience
-
-### Platform Leverage
-
-If Shopify implements WAP, **every Shopify store automatically gets baseline agentic capabilities.**
-
-This is the key to rapid adoption - platforms unlock thousands of sites at once.
-
-### Economic Incentives
-
-**For Website Owners:**
-- Better UX without losing control
-- Maintain monetization strategies
-- Get analytics on agent usage
-- Competitive advantage ("AI-Ready" badge)
-- Future-proof as agents become mainstream
-
-**For Users:**
-- Natural language interface
-- Faster task completion
-- Reduced cognitive load
-- Privacy maintained
-- Better than adversarial automation
-
-**For Platform Providers:**
-- Differentiation in crowded market
-- New analytics opportunities
-- Happy customers on both sides
-- Revenue opportunities (hosting agent models, etc.)
-
-## Limitations (By Design)
-
-WAP is intentionally scoped to address real problems without over-engineering:
-
-### Single-Domain Scope
-
-**Limitation:** WAP agents cannot orchestrate workflows across multiple websites in a single command.
-
-**Why It's Intentional:** Cross-domain orchestration introduces massive complexity:
-- Who pays for inference costs?
-- How do you handle authentication across sites?
-- What happens when one site's API changes?
-- Security implications of cross-domain data flow
-
-By scoping to single domains, WAP inherits all the web's existing security properties. Users can complete tasks on Site A, then move to Site B - the same way they browse today.
-
-### Requires Site Adoption
-
-**Limitation:** Sites must explicitly implement WAP manifests.
-
-**Why It's Intentional:** This is a feature, not a bug. Opt-in cooperation ensures:
-- Sites maintain control over their experience
-- Security model remains sound
-- Monetization is preserved
-- APIs are maintained and supported
-- Agentic planning is more powerful.
-
-Yes, this means slower initial adoption than adversarial approaches. But it means **sustainable, long-term success** instead of an arms race.
-
-### HTML Transform Limitations
-
-**Limitation:** Sites using HTML transforms (for legacy pages without APIs) won't work as reliably as sites with proper APIs.
-
-**Why It's Intentional:** This creates **upgrade pressure**. Sites that provide clean JSON APIs will perform better in agent mode, naturally incentivizing modernization. The transform capability exists as a bridge, not a destination.
-
-### Data Processing Model
-
-**Limitation:** WAP requires trusting the website's model endpoint.
-
-**Why It's Intentional:** This preserves the web's existing trust model. When you share information with amazon.com, you've made a conscious decision to trust Amazon with that data, not OpenAI or Perplexity. WAP maintains that boundary.
-
-Alternatives like Comet and Atlas introduce a **new third-party** into every interaction - the AI provider sees everything you share with any website. WAP eliminates this middleman.
-
-For privacy-conscious organizations, WAP supports self-hosted model endpoints, ensuring data never leaves their trusted boundary. For smaller sites, they can build a layer over public model providers (similar to Supabase or Vercel), but this is the website owner's choice, not forced on users.
+**Trust Model:** WAP requires trusting the website's model endpoint - but this preserves the web's existing trust model. When you share information with amazon.com, you've chosen to trust Amazon, not a third-party AI provider. For privacy-conscious organizations, WAP supports self-hosted model endpoints.
 
 ## What's Next
 
 WAP is currently in the specification phase. We're building:
 
 1. **Reference Implementation** - Open-source WAP engine (NPM package)
-1. **Sample Manifests** - Real-world examples from e-commerce, SaaS, productivity apps
-1. **Onboarding Tools** - AI agent that crawls sites and generates draft manifests
-1. **Developer Documentation** - Integration guides, best practices, security guidelines
+2. **Sample Manifests** - Real-world examples from e-commerce, SaaS, productivity apps
+3. **Onboarding Tools** - AI agent that crawls sites and generates draft manifests
+4. **Developer Documentation** - Integration guides, best practices, security guidelines
 
-**Early Access:**
-We're looking for early partners - especially platforms (Shopify, WooCommerce, etc.) and innovative SaaS companies. If you're interested in being part of the first wave, reach out.
+**Early Access:** We're looking for early partners - especially platforms (Shopify, WooCommerce) and innovative SaaS companies.
+
+## Complementary Goals (Out of scope for WAP)
+
+Investments/advancements in these directions would make WAP be more effective
+
+- LLMs/SLMs particularly fine-tuned for the Browser, Agentic Browser interactions, User interfaces and capabilities
+  - This could drastically reduce inference cost, and increase speed, efficiency, and reliability.
+- Browsers/W3C Specs to solve safe multi website interactions and build on-top of WAP.
+- On-device inferencing would even increase privacy
+
+[Try the Interactive Demo](./live-demo.md)
 
 ---
 
-## The Bottom Line
-WAP proves that the path to agentic browsing doesn't require breaking the web's security model, routing user data through third-party AI providers, fighting website owners, or building unreliable automation.
+## The Vision
 
-It just requires **cooperation.**
+The web's next chapter will be conversational. Users will expect to interact with websites through natural language, not just by clicking through predetermined paths.
 
-The question isn't whether agentic browsing will happen - it's whether we'll do it in a way that benefits everyone.
+The question is whether we build this future cooperatively - respecting website owners, protecting user privacy, and maintaining security - or through an adversarial arms race that benefits neither side.
+
+WAP offers a path forward that works for everyone.
 
 ---
 
-**Related Resources:**
+**Upcoming Resources:**
 
+Please note, these resources are still being worked on
 - [Complete Technical Specification](./technical-design.md)
 - [Todo Management Example (Full Implementation)](./todo-management-example.md)
 - [Amazon CoPilot Mode Example](./amazon-copilot-example.md)
@@ -446,10 +341,10 @@ The question isn't whether agentic browsing will happen - it's whether we'll do 
 **References:**
 
 1. [AI browsers or agentic browsers: a look at the future of web surfing](https://www.malwarebytes.com/blog/ai/2025/09/ai-browsers-or-agentic-browsers-a-look-at-the-future-of-web-surfing)
-1. [ChatGPT Atlas: Browser Security Risks](https://www.cyberhaven.com/blog/browser-agent-security-risk-chatgpt-atlas)
-1. [Building ChatGPT Atlas (OpenAI)](https://openai.com/index/building-chatgpt-atlas/)
-1. [Comet Prompt Injection Vulnerability (Brave)](https://brave.com/blog/comet-prompt-injection/)
-1. [Amazon's Response to Perplexity Comet](https://www.aboutamazon.com/news/company-news/amazon-perplexity-comet-statement)
+2. [ChatGPT Atlas: Browser Security Risks](https://www.cyberhaven.com/blog/browser-agent-security-risk-chatgpt-atlas)
+3. [Building ChatGPT Atlas (OpenAI)](https://openai.com/index/building-chatgpt-atlas/)
+4. [Comet Prompt Injection Vulnerability (Brave)](https://brave.com/blog/comet-prompt-injection/)
+5. [Amazon's Response to Perplexity Comet](https://www.aboutamazon.com/news/company-news/amazon-perplexity-comet-statement)
 
 ---
 
@@ -458,6 +353,6 @@ The question isn't whether agentic browsing will happen - it's whether we'll do 
 ---
 
 **About the Author:**
-I'm the Lead Developer and Co-Founder at MidEarth Labs, building open-source frameworks for rapid AI-based software prototyping. After 12+ years in software engineering (including time at AWS working on systems serving millions), I'm focused on making AI practical and safe for real-world applications.
+I'm Oladipo Fasoro, the Lead Developer and Co-Founder at MidEarth Labs, building open-source frameworks for rapid AI-based software prototyping. After 12+ years in software engineering (including time at AWS working on systems serving millions), I'm focused on making AI practical and safe for real-world applications.
 
-Connect with me on [LinkedIn](https://linkedin.com) | Follow the project on [GitHub](https://github.com/midearth-labs/web-agent-protocol)
+Connect with me on [LinkedIn](https://www.linkedin.com/in/dfasoro/) | Follow the project on [GitHub](https://github.com/midearth-labs/web-agent-protocol)
