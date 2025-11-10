@@ -2,6 +2,13 @@
 
 This document provides step-by-step plans for implementing 5 different user requests using the IApiClient interface methods. Each journey follows the format established in the api-client-interface.ts User Journey Examples section.
 
+### User Journeys / Requests
+1. Add a todo to review Q4 budget, make it due end of next week
+1. Mark all todos with 'meeting' in the title as complete
+1. Delete all todos that are overdue by more than 30 days
+1. I need to prepare slides for the investor meeting on Nov 15, book the conference room, and send agenda by Nov 13
+1. Push all incomplete todos due this week to next Monday, except anything with 'urgent' in it
+
 ---
 
 ## Journey 1: Add a todo to review Q4 budget, make it due end of next week
