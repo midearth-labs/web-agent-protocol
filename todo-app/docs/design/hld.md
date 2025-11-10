@@ -357,7 +357,8 @@ erDiagram
 **Read Operations**:
 1. All reads served directly from in-memory cache
 2. No file I/O on reads
-3. Status calculated on-demand from cache data
+3. No lock required (lock-free reads for better performance)
+4. Status calculated on-demand from cache data
 
 **Write Operations** (Copy-on-Write Pattern):
 1. Acquire global lock (simple boolean flag)
@@ -378,7 +379,7 @@ erDiagram
 
 **Concurrency Control**:
 - Simple global boolean lock flag (not file-system level)
-- Lock on all operations (read and write)
+- Lock on write operations only (reads are lock-free for better performance)
 - Retry with exponential backoff on lock conflicts
 - Backoff: 50ms, 100ms, 200ms, 400ms, 800ms
 - Max retries: 5
@@ -554,11 +555,8 @@ sequenceDiagram
     Client->>API: GET /todos?filters
     API->>API: Parse & Validate Filters
     API->>BusinessLogic: List Todos (filters)
-    BusinessLogic->>Cache: Acquire Lock (with retry)
-    Cache->>BusinessLogic: Lock Acquired
-    BusinessLogic->>Cache: Read All Todos
+    BusinessLogic->>Cache: Read All Todos (no lock needed)
     Cache->>BusinessLogic: In-Memory Data
-    BusinessLogic->>Cache: Release Lock
     
     loop For Each Todo
         BusinessLogic->>BusinessLogic: Calculate Status (UTC)

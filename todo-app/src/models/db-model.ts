@@ -72,14 +72,16 @@ export type TodoEntity = {
   /**
    * Creation timestamp (UTC)
    * Automatically set on creation, immutable
+   * ISO 8601 string format (e.g., "2025-11-10T10:00:00.000Z")
    */
-  createdAt: Date;
+  createdAt: string;
 
   /**
    * Last modification timestamp (UTC)
    * Automatically updated on successful changes
+   * ISO 8601 string format (e.g., "2025-11-10T10:00:00.000Z")
    */
-  modifiedAt: Date;
+  modifiedAt: string;
 };
 
 /**
