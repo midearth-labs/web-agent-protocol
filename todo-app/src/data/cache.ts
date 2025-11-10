@@ -7,9 +7,12 @@ import type {
   TodoEntity,
   TodosCache,
   CacheConfig,
-  FileOperationError,
 } from "../models/db-model.js";
 import { FileStorageService } from "./file-storage.js";
+import {
+  FileLockTimeoutError,
+  ResourceNotFoundError,
+} from "../errors/index.js";
 
 /**
  * Default retry backoff intervals in milliseconds
@@ -48,15 +51,13 @@ export class CacheService {
    * Initializes the cache by loading data from file
    * Must be called before any other operations
    * Fails if file doesn't exist (manual initialization required)
+   * @throws FileNotFoundError if file doesn't exist
+   * @throws FileReadError if file cannot be read
+   * @throws FileParseError if JSON parsing fails
+   * @throws InvalidFileFormatError if file structure is invalid
    */
-  async initialize(): Promise<{ success: true } | { success: false; error: FileOperationError }> {
-    const result = await this.fileStorage.readFile();
-    if (!result.success) {
-      return result;
-    }
-
-    this.cache = result.data;
-    return { success: true };
+  async initialize(): Promise<void> {
+    this.cache = await this.fileStorage.readFile();
   }
 
   /**
@@ -91,20 +92,12 @@ export class CacheService {
 
   /**
    * Executes an operation with lock acquisition and retry
-   * Returns error if lock cannot be acquired after retries
+   * @throws FileLockTimeoutError if lock cannot be acquired after retries
    */
-  private async withLock<T>(
-    operation: () => Promise<T>
-  ): Promise<T | { success: false; error: FileOperationError }> {
+  private async withLock<T>(operation: () => Promise<T>): Promise<T> {
     const lockAcquired = await this.acquireLock();
     if (!lockAcquired) {
-      return {
-        success: false,
-        error: {
-          code: "FILE_LOCK_TIMEOUT",
-          message: "Failed to acquire lock after retries. Please try again.",
-        },
-      } as const;
+      throw new FileLockTimeoutError();
     }
 
     try {
@@ -143,26 +136,23 @@ export class CacheService {
   /**
    * Commits a cache copy to the main cache and syncs to file
    * This is the atomic commit step in copy-on-write pattern
+   * @throws FileWriteError if file cannot be written
    */
-  private async commitCache(cacheCopy: TodosCache): Promise<{ success: false; error: FileOperationError } | void> {
+  private async commitCache(cacheCopy: TodosCache): Promise<void> {
     // Commit to main cache
     this.cache = cacheCopy;
 
-    // Sync to file
-    const writeResult = await this.fileStorage.writeFile(this.cache);
-    if (!writeResult.success) {
-      // Rollback: restore previous cache state
-      // Note: In a real system, we might want to keep a backup, but for MVP simplicity,
-      // we just log the error. The cache is already updated, so we return the error.
-      return writeResult;
-    }
+    // Sync to file (throws on error)
+    await this.fileStorage.writeFile(this.cache);
   }
 
   /**
    * Creates a new todo in the cache
+   * @throws FileLockTimeoutError if lock cannot be acquired
+   * @throws FileWriteError if file cannot be written
    */
-  async create(entity: TodoEntity): Promise<{ success: false; error: FileOperationError } | void> {
-    const result = await this.withLock(async () => {
+  async create(entity: TodoEntity): Promise<void> {
+    await this.withLock(async () => {
       // Create copy of cache
       const cacheCopy = this.createCacheCopy();
 
@@ -170,29 +160,35 @@ export class CacheService {
       cacheCopy[entity.id] = entity;
 
       // Commit and sync
-      return await this.commitCache(cacheCopy);
+      await this.commitCache(cacheCopy);
     });
-
-    if (result && typeof result === "object" && "success" in result && !result.success) {
-      return result;
-    }
   }
 
   /**
    * Updates an existing todo in the cache
+   * @param id - Todo ID
+   * @param updates - Partial updates to apply
+   * @param preConditionCheck - Optional callback that validates the cache state before update (runs within lock)
+   * @throws ResourceNotFoundError if todo not found
+   * @throws FileLockTimeoutError if lock cannot be acquired
+   * @throws FileWriteError if file cannot be written
+   * @throws Any error thrown by preConditionCheck
    */
-  async update(id: string, updates: Partial<TodoEntity>): Promise<{ success: false; error: FileOperationError } | void> {
-    const result = await this.withLock(async () => {
+  async update(
+    id: string,
+    updates: Partial<TodoEntity>,
+    preConditionCheck?: (cache: TodosCache) => void
+  ): Promise<void> {
+    await this.withLock(async () => {
       // Check if todo exists
       if (!this.cache[id]) {
-        return {
-          success: false,
-          error: {
-            code: "INVALID_FORMAT" as const,
-            message: `Todo with id ${id} not found`,
-            details: { id },
-          },
-        } as const;
+        throw new ResourceNotFoundError("Todo", id);
+      }
+
+      // Run pre-condition check if provided (within lock, before any changes)
+      // If it throws, the error bubbles up and no changes are made
+      if (preConditionCheck) {
+        preConditionCheck(this.cache);
       }
 
       // Create copy of cache
@@ -206,29 +202,30 @@ export class CacheService {
       };
 
       // Commit and sync
-      return await this.commitCache(cacheCopy);
+      await this.commitCache(cacheCopy);
     });
-
-    if (result && typeof result === "object" && "success" in result && !result.success) {
-      return result;
-    }
   }
 
   /**
    * Deletes a todo from the cache
+   * @param id - Todo ID
+   * @param preConditionCheck - Optional callback that validates the cache state before delete (runs within lock)
+   * @throws ResourceNotFoundError if todo not found
+   * @throws FileLockTimeoutError if lock cannot be acquired
+   * @throws FileWriteError if file cannot be written
+   * @throws Any error thrown by preConditionCheck
    */
-  async delete(id: string): Promise<{ success: false; error: FileOperationError } | void> {
-    const result = await this.withLock(async () => {
+  async delete(id: string, preConditionCheck?: (cache: TodosCache) => void): Promise<void> {
+    await this.withLock(async () => {
       // Check if todo exists
       if (!this.cache[id]) {
-        return {
-          success: false,
-          error: {
-            code: "INVALID_FORMAT" as const,
-            message: `Todo with id ${id} not found`,
-            details: { id },
-          },
-        } as const;
+        throw new ResourceNotFoundError("Todo", id);
+      }
+
+      // Run pre-condition check if provided (within lock, before any changes)
+      // If it throws, the error bubbles up and no changes are made
+      if (preConditionCheck) {
+        preConditionCheck(this.cache);
       }
 
       // Create copy of cache
@@ -238,12 +235,53 @@ export class CacheService {
       delete cacheCopy[id];
 
       // Commit and sync
-      return await this.commitCache(cacheCopy);
+      await this.commitCache(cacheCopy);
     });
+  }
 
-    if (result && typeof result === "object" && "success" in result && !result.success) {
-      return result;
-    }
+  /**
+   * Bulk updates status for multiple todos
+   * All updates happen atomically within a single lock
+   * @param ids - Array of todo IDs to update
+   * @param status - New status to set
+   * @param preConditionCheck - Optional callback that validates the cache state before update (runs within lock)
+   * @throws ResourceNotFoundError if any todo not found
+   * @throws FileLockTimeoutError if lock cannot be acquired
+   * @throws FileWriteError if file cannot be written
+   * @throws Any error thrown by preConditionCheck
+   */
+  async bulkUpdateStatus(
+    ids: string[],
+    status: TodoEntity["status"],
+    preConditionCheck?: (cache: TodosCache) => void
+  ): Promise<void> {
+    await this.withLock(async () => {
+      // Run pre-condition check if provided (within lock, before any changes)
+      // If it throws, the error bubbles up and no changes are made
+      if (preConditionCheck) {
+        preConditionCheck(this.cache);
+      }
+
+      // Create copy of cache
+      const cacheCopy = this.createCacheCopy();
+      const now = new Date().toISOString();
+
+      // Update all entities
+      for (const id of ids) {
+        if (!cacheCopy[id]) {
+          throw new ResourceNotFoundError("Todo", id);
+        }
+
+        cacheCopy[id] = {
+          ...cacheCopy[id]!,
+          status,
+          modifiedAt: now,
+        };
+      }
+
+      // Commit and sync
+      await this.commitCache(cacheCopy);
+    });
   }
 
   /**

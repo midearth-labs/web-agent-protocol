@@ -22,12 +22,13 @@ async function main() {
 
   // Initialize cache from file
   console.log(`Initializing cache from file: ${FILE_PATH}`);
-  const initResult = await cache.initialize();
-  if (!initResult.success) {
-    console.error("Failed to initialize cache:", initResult.error.message);
+  try {
+    await cache.initialize();
+    console.log(`Cache initialized with ${cache.getSize()} todos`);
+  } catch (error) {
+    console.error("Failed to initialize cache:", error instanceof Error ? error.message : String(error));
     process.exit(1);
   }
-  console.log(`Cache initialized with ${cache.getSize()} todos`);
 
   // Initialize business logic service
   const todoService = new TodoService(cache);

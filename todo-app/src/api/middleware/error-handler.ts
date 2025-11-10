@@ -6,6 +6,7 @@ import type { Request, Response, NextFunction } from "express";
 import { ZodError } from "zod";
 import type { ErrorResponse } from "../../models/api-model.js";
 import { ErrorCodes } from "../../models/api-model.js";
+import { AppError } from "../../errors/index.js";
 
 /**
  * Formats Zod validation errors into API error response
@@ -26,6 +27,19 @@ function formatZodError(error: ZodError): ErrorResponse {
 }
 
 /**
+ * Converts AppError to API error response
+ */
+function formatAppError(error: AppError): ErrorResponse {
+  return {
+    error: {
+      code: error.code,
+      message: error.message,
+      details: error.details,
+    },
+  };
+}
+
+/**
  * Error handling middleware
  */
 export function errorHandler(
@@ -41,20 +55,15 @@ export function errorHandler(
     return;
   }
 
-  // Generic Error objects
-  if (err instanceof Error) {
-    // Check if it's a "not found" error
-    if (err.message.includes("not found")) {
-      const errorResponse: ErrorResponse = {
-        error: {
-          code: ErrorCodes.NOT_FOUND,
-          message: err.message,
-        },
-      };
-      res.status(404).json(errorResponse);
-      return;
-    }
+  // Typed application errors
+  if (err instanceof AppError) {
+    const errorResponse = formatAppError(err);
+    res.status(err.statusCode).json(errorResponse);
+    return;
+  }
 
+  // Generic Error objects (fallback for unexpected errors)
+  if (err instanceof Error) {
     const errorResponse: ErrorResponse = {
       error: {
         code: ErrorCodes.INTERNAL_ERROR,

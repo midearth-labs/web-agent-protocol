@@ -5,10 +5,14 @@
 
 import { promises as fs } from "node:fs";
 import { dirname } from "node:path";
-import type {
-  TodosFileContent,
-  FileOperationResult,
-} from "../models/db-model.js";
+import type { TodosFileContent } from "../models/db-model.js";
+import {
+  FileNotFoundError,
+  FileReadError,
+  FileWriteError,
+  FileParseError,
+  InvalidFileFormatError,
+} from "../errors/index.js";
 
 /**
  * File Storage Service
@@ -25,99 +29,80 @@ export class FileStorageService {
   /**
    * Reads the JSON file and returns the cache content
    * Fails if file doesn't exist (manual initialization required per HLD)
+   * @throws FileNotFoundError if file doesn't exist
+   * @throws FileReadError if file cannot be read
+   * @throws FileParseError if JSON parsing fails
+   * @throws InvalidFileFormatError if file structure is invalid
    */
-  async readFile(): Promise<FileOperationResult<TodosFileContent>> {
+  async readFile(): Promise<TodosFileContent> {
+    // Check if file exists
     try {
-      // Check if file exists
-      try {
-        await fs.access(this.filePath);
-      } catch (error) {
-        return {
-          success: false,
-          error: {
-            code: "FILE_NOT_FOUND",
-            message: `File not found: ${this.filePath}. File must be created manually before first run.`,
-            details: { filePath: this.filePath },
-          },
-        };
-      }
-
-      // Read file content
-      const fileContent = await fs.readFile(this.filePath, "utf-8");
-
-      // Parse JSON
-      let parsed: TodosFileContent;
-      try {
-        parsed = JSON.parse(fileContent) as TodosFileContent;
-      } catch (error) {
-        return {
-          success: false,
-          error: {
-            code: "PARSE_ERROR",
-            message: `Failed to parse JSON file: ${error instanceof Error ? error.message : "Unknown error"}`,
-            details: { filePath: this.filePath },
-          },
-        };
-      }
-
-      // Validate structure (must be an object)
-      if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
-        return {
-          success: false,
-          error: {
-            code: "INVALID_FORMAT",
-            message: "File must contain a JSON object (key-value store)",
-            details: { filePath: this.filePath },
-          },
-        };
-      }
-
-      return { success: true, data: parsed };
+      await fs.access(this.filePath);
     } catch (error) {
-      return {
-        success: false,
-        error: {
-          code: "FILE_READ_ERROR",
-          message: `Failed to read file: ${error instanceof Error ? error.message : "Unknown error"}`,
-          details: { filePath: this.filePath, error: String(error) },
-        },
-      };
+      throw new FileNotFoundError(this.filePath);
     }
+
+    // Read file content
+    let fileContent: string;
+    try {
+      fileContent = await fs.readFile(this.filePath, "utf-8");
+    } catch (error) {
+      throw new FileReadError(
+        error instanceof Error ? error.message : "Unknown error",
+        this.filePath
+      );
+    }
+
+    // Parse JSON
+    let parsed: TodosFileContent;
+    try {
+      parsed = JSON.parse(fileContent) as TodosFileContent;
+    } catch (error) {
+      throw new FileParseError(
+        error instanceof Error ? error.message : "Unknown error",
+        this.filePath
+      );
+    }
+
+    // Validate structure (must be an object)
+    if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+      throw new InvalidFileFormatError(
+        "File must contain a JSON object (key-value store)",
+        this.filePath
+      );
+    }
+
+    return parsed;
   }
 
   /**
    * Writes the cache content to the JSON file
    * Creates directory if it doesn't exist
    * Uses in-memory write (no temp file per HLD clarification)
+   * @throws FileWriteError if file cannot be written
    */
-  async writeFile(cache: TodosFileContent): Promise<FileOperationResult<void>> {
+  async writeFile(cache: TodosFileContent): Promise<void> {
+    // Ensure directory exists
+    const dir = dirname(this.filePath);
     try {
-      // Ensure directory exists
-      const dir = dirname(this.filePath);
-      try {
-        await fs.mkdir(dir, { recursive: true });
-      } catch (error) {
-        // Directory might already exist, ignore
-      }
-
-      // Serialize JSON (no conversion needed - cache already uses ISO strings)
-      const jsonString = this.prettyPrint
-        ? JSON.stringify(cache, null, 2)
-        : JSON.stringify(cache);
-
-      // Write file (in-memory write, no temp file per HLD)
-      await fs.writeFile(this.filePath, jsonString, "utf-8");
-
-      return { success: true, data: undefined };
+      await fs.mkdir(dir, { recursive: true });
     } catch (error) {
-      return {
-        success: false,
-        error: {
-          code: "FILE_WRITE_ERROR",
-          message: `Failed to write file: ${error instanceof Error ? error.message : "Unknown error"}`,
-          details: { filePath: this.filePath, error: String(error) },
-        },
-      };
+      // Directory might already exist, ignore
+    }
+
+    // Serialize JSON (no conversion needed - cache already uses ISO strings)
+    const jsonString = this.prettyPrint
+      ? JSON.stringify(cache, null, 2)
+      : JSON.stringify(cache);
+
+    // Write file (in-memory write, no temp file per HLD)
+    try {
+      await fs.writeFile(this.filePath, jsonString, "utf-8");
+    } catch (error) {
+      throw new FileWriteError(
+        error instanceof Error ? error.message : "Unknown error",
+        this.filePath
+      );
     }
   }
 }

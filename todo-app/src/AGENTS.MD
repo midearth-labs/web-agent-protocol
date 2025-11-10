@@ -137,16 +137,23 @@ todo-app/src
 - Error handling: Comprehensive error types for file operations
 
 **Design Decisions**:
-- Uses `INVALID_FORMAT` error code for "not found" cases (since FileErrorCode doesn't have NOT_FOUND)
+- **Direct Error Throwing**: All methods throw typed errors directly (no result objects)
 - Read operations are lock-free (optimized for performance in single-user MVP)
 - Write operations use lock with exponential backoff retry
 - File must exist before startup (manual initialization required)
 - In-memory write (no temp file) per HLD clarification
+- **PreConditionCheck Pattern**: Validation callbacks run within write locks for atomicity
+
+**Error Handling**:
+- File operations throw: `FileNotFoundError`, `FileReadError`, `FileWriteError`, `FileParseError`, `InvalidFileFormatError`
+- Cache operations throw: `ResourceNotFoundError`, `FileLockTimeoutError`, `FileWriteError`
+- All errors preserve original types and messages (no masking)
 
 **Rationale**: 
 - Lock-free reads optimize performance for single-user MVP (no concurrent write conflicts during reads)
 - Write operations remain atomic with copy-on-write pattern
-- Type-safe error handling with proper TypeScript types
+- Type-safe error handling with typed error classes
+- No error masking - errors bubble up with original types
 - Follows updated HLD section 4.5 specifications
 
 ---
@@ -359,13 +366,15 @@ z.refine(..., { message: "Due date cannot be in the past" })
 ### Error Handling
 
 **Business Layer**:
-- Throw `Error` objects with descriptive messages
-- Check cache operation results before proceeding
-- Let errors bubble up to API layer
+- Throw typed error classes (e.g., `ResourceNotFoundError`, `ValidationError`)
+- **Never check result objects** - errors throw directly from cache layer
+- Let errors bubble up to API layer naturally
+- Use `preConditionCheck` callbacks for validation within locks
 
 **API Layer**:
 - Use `errorHandler` middleware (must be last)
 - Zod validation errors automatically handled (400 status)
+- Typed errors (`AppError` subclasses) automatically mapped to correct HTTP status
 - Generic errors return 500 status with `INTERNAL_ERROR` code
 
 **Rationale**: 
@@ -374,6 +383,252 @@ z.refine(..., { message: "Due date cannot be in the past" })
 - Maintains clear separation between layers
 - Follows Zod v4 best practices
 - Makes follow-up implementations smoother and more predictable
+
+---
+
+## Typed Error Classes
+
+**Date**: 2025-11-10  
+**Decision**: Use typed error classes instead of string-based error message parsing.
+
+**Error Class Hierarchy**:
+```
+AppError (base class)
+├── ResourceNotFoundError (404)
+├── ValidationError (400)
+│   └── InvalidStatusTransitionError (400)
+├── BulkOperationFailedError (400)
+├── ConflictError (409)
+│   └── FileLockTimeoutError (409)
+└── InternalServerError (500)
+    └── FileOperationError (500)
+        ├── FileNotFoundError (500)
+        ├── FileReadError (500)
+        ├── FileWriteError (500)
+        ├── FileParseError (500)
+        └── InvalidFileFormatError (500)
+```
+
+**Location**: `src/errors/index.ts`
+
+**Key Features**:
+- All errors extend `AppError` base class
+- Each error has: `code` (ErrorCode), `statusCode` (HTTP status), `message`, optional `details`
+- Errors preserve original stack traces
+- Type-safe error handling with `instanceof` checks
+
+**Usage Pattern**:
+```typescript
+// Business layer throws typed errors
+throw new ResourceNotFoundError("Todo", id);
+throw new ValidationError("Due date cannot be in the past");
+throw new InvalidStatusTransitionError("Cannot transition from 'due' to 'initial'");
+
+// Error handler uses instanceof checks
+if (err instanceof AppError) {
+  res.status(err.statusCode).json({
+    error: {
+      code: err.code,
+      message: err.message,
+      details: err.details,
+    },
+  });
+}
+```
+
+**Rationale**: 
+- Type safety: Compile-time checks instead of string matching
+- Maintainability: No fragile string parsing in error handler
+- Extensibility: Easy to add new error types
+- Consistency: Standardized error structure across application
+- Better debugging: Proper stack traces preserved
+
+---
+
+## Direct Error Throwing Pattern
+
+**Date**: 2025-11-10  
+**Decision**: All data layer methods throw errors directly instead of returning result objects.
+
+**Previous Pattern (Deprecated)**:
+```typescript
+// ❌ DON'T USE: Result object pattern
+async create(entity: TodoEntity): Promise<{ success: false; error: FileOperationError } | void> {
+  const result = await this.fileStorage.writeFile(...);
+  if (result && !result.success) {
+    return result; // Error masking
+  }
+}
+```
+
+**Current Pattern (Use This)**:
+```typescript
+// ✅ USE: Direct error throwing
+async create(entity: TodoEntity): Promise<void> {
+  await this.fileStorage.writeFile(this.cache); // Throws on error
+}
+
+// Business layer - no result checking needed
+async createTodo(input: CreateTodoInput): Promise<TodoDTO> {
+  await this.cache.create(entity); // Errors bubble up naturally
+  return this.entityToDTO(entity);
+}
+```
+
+**Key Principles**:
+1. **No Result Objects**: Methods return `void` or data directly, never `{ success: boolean, error?: ... }`
+2. **Throw on Error**: All error conditions throw typed errors immediately
+3. **No Error Masking**: Errors propagate with original types and messages
+4. **No Result Checking**: Business layer doesn't check `if (result && !result.success)`
+5. **Natural Error Bubbling**: Errors flow up the call stack without conversion
+
+**File Storage Pattern**:
+```typescript
+// ✅ Throws typed errors directly
+async readFile(): Promise<TodosFileContent> {
+  try {
+    await fs.access(this.filePath);
+  } catch (error) {
+    throw new FileNotFoundError(this.filePath);
+  }
+  // ... rest of implementation
+}
+
+// ✅ Throws on write failure
+async writeFile(cache: TodosFileContent): Promise<void> {
+  try {
+    await fs.writeFile(this.filePath, jsonString, "utf-8");
+  } catch (error) {
+    throw new FileWriteError(
+      error instanceof Error ? error.message : "Unknown error",
+      this.filePath
+    );
+  }
+}
+```
+
+**Cache Layer Pattern**:
+```typescript
+// ✅ Throws errors directly
+async update(id: string, updates: Partial<TodoEntity>, preConditionCheck?: ...): Promise<void> {
+  await this.withLock(async () => {
+    if (!this.cache[id]) {
+      throw new ResourceNotFoundError("Todo", id); // Direct throw
+    }
+    if (preConditionCheck) {
+      preConditionCheck(this.cache); // Throws bubble up naturally
+    }
+    await this.commitCache(cacheCopy); // Throws on file write error
+  });
+}
+```
+
+**Business Layer Pattern**:
+```typescript
+// ✅ No result checking - errors bubble up
+async updateTodo(input: UpdateTodoInput): Promise<TodoDTO> {
+  await this.cache.update(input.id, updates, preConditionCheck); // Throws on error
+  const updatedEntity = await this.cache.getById(input.id);
+  return this.entityToDTO(updatedEntity);
+}
+```
+
+**Rationale**: 
+- **No Error Masking**: Original error types and messages preserved
+- **Simpler Code**: No boilerplate result checking
+- **Type Safety**: Typed errors instead of string matching
+- **Better Debugging**: Original stack traces preserved
+- **Consistent Pattern**: All layers use same error throwing approach
+
+---
+
+## PreConditionCheck Callback Pattern
+
+**Date**: 2025-11-10  
+**Decision**: Use `preConditionCheck` callbacks for validation within write locks.
+
+**Purpose**: 
+- Perform validation and reads within the write lock
+- Ensure atomicity: validation and writes happen in single lock
+- Allow business logic to validate cache state before mutations
+
+**Signature**:
+```typescript
+preConditionCheck?: (cache: TodosCache) => void
+```
+
+**Usage in Cache Layer**:
+```typescript
+async update(
+  id: string,
+  updates: Partial<TodoEntity>,
+  preConditionCheck?: (cache: TodosCache) => void
+): Promise<void> {
+  await this.withLock(async () => {
+    // Check existence
+    if (!this.cache[id]) {
+      throw new ResourceNotFoundError("Todo", id);
+    }
+
+    // Run pre-condition check within lock (before any changes)
+    if (preConditionCheck) {
+      preConditionCheck(this.cache); // Throws on validation failure
+    }
+
+    // Apply changes
+    const cacheCopy = this.createCacheCopy();
+    cacheCopy[id] = { ...cacheCopy[id]!, ...updates, id };
+    await this.commitCache(cacheCopy);
+  });
+}
+```
+
+**Usage in Business Layer**:
+```typescript
+async updateTodo(input: UpdateTodoInput): Promise<TodoDTO> {
+  const preConditionCheck = (cache: TodosCache): void => {
+    const existingEntity = cache[input.id];
+    if (!existingEntity) {
+      throw new ResourceNotFoundError("Todo", input.id);
+    }
+
+    // Validate status transition within lock
+    if (input.status !== undefined && input.status !== existingEntity.status) {
+      this.validateStatusTransition(existingEntity, input.status);
+    }
+
+    // Validate due date within lock
+    if (input.dueDate !== undefined && input.dueDate !== null) {
+      const currentDate = getCurrentDateUTC();
+      if (input.dueDate < currentDate) {
+        throw new ValidationError("Due date cannot be in the past");
+      }
+    }
+  };
+
+  await this.cache.update(input.id, updates, preConditionCheck);
+  // ... rest of implementation
+}
+```
+
+**Key Principles**:
+1. **Within Lock**: Callback runs inside `withLock()`, ensuring atomicity
+2. **Before Changes**: Validation happens before cache copy is created
+3. **Throws on Failure**: Callback throws typed errors on validation failure
+4. **No Masking**: Errors bubble up naturally without conversion
+5. **Read from Cache**: Callback receives `TodosCache` to read current state
+
+**Benefits**:
+- **Atomicity**: All reads and writes happen within single lock
+- **Consistency**: Validation uses current cache state (no race conditions)
+- **Flexibility**: Business logic can implement complex validation
+- **Error Propagation**: Validation errors bubble up with original types
+
+**Rationale**: 
+- Ensures validation and updates are atomic
+- Prevents race conditions by validating within lock
+- Allows business logic to validate cache state before mutations
+- Maintains error type safety throughout the stack
 
 ---
 

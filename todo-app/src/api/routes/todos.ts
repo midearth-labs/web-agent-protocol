@@ -4,10 +4,10 @@
 
 import { Router } from "express";
 import type { Request, Response } from "express";
-import { CreateTodoRequestSchema, ListTodosQuerySchema, TodoIdParamSchema, parseFilterParam } from "../../models/api-model.js";
+import { CreateTodoRequestSchema, ListTodosQuerySchema, TodoIdParamSchema, UpdateTodoRequestSchema, BulkUpdateStatusRequestSchema, parseFilterParam } from "../../models/api-model.js";
 import { validateBody, validateQuery, validateParams } from "../middleware/validator.js";
 import type { TodoService } from "../../business/todo-service.js";
-import type { CreateTodoRequest, ListTodosQuery, TodoIdParam, TodoResponse, TodoListResponse } from "../../models/api-model.js";
+import type { CreateTodoRequest, ListTodosQuery, TodoIdParam, UpdateTodoRequest, BulkUpdateStatusRequest, TodoResponse, TodoListResponse } from "../../models/api-model.js";
 
 /**
  * Parses filter query parameters into filter criteria format
@@ -158,6 +158,78 @@ export function createTodoRoutes(todoService: TodoService): Router {
 
       // Return response
       res.status(200).json({ data: dto });
+    }
+  );
+
+  /**
+   * PATCH /api/v1/todos/:id
+   * Update a todo (partial update)
+   */
+  router.patch(
+    "/:id",
+    validateParams(TodoIdParamSchema),
+    validateBody(UpdateTodoRequestSchema),
+    async (req: Request<TodoIdParam, TodoResponse, UpdateTodoRequest>, res: Response<TodoResponse>) => {
+      const { id } = req.params;
+      const input = req.body;
+
+      // Convert API request to business input
+      const updateInput = {
+        id,
+        title: input.title,
+        description: input.description,
+        dueDate: input.dueDate,
+        status: input.status,
+        priority: input.priority,
+      };
+
+      // Update todo
+      const dto = await todoService.updateTodo(updateInput);
+
+      // Return response
+      res.status(200).json({ data: dto });
+    }
+  );
+
+  /**
+   * DELETE /api/v1/todos/:id
+   * Delete a todo
+   */
+  router.delete(
+    "/:id",
+    validateParams(TodoIdParamSchema),
+    async (req: Request<TodoIdParam>, res: Response) => {
+      const { id } = req.params;
+
+      // Delete todo
+      await todoService.deleteTodo(id);
+
+      // Return 204 No Content
+      res.status(204).send();
+    }
+  );
+
+  /**
+   * POST /api/v1/todos/bulk-update-status
+   * Bulk update status for multiple todos
+   */
+  router.post(
+    "/bulk-update-status",
+    validateBody(BulkUpdateStatusRequestSchema),
+    async (req: Request<unknown, TodoListResponse, BulkUpdateStatusRequest>, res: Response<TodoListResponse>) => {
+      const input = req.body;
+
+      // Convert API request to business input
+      const bulkUpdateInput = {
+        ids: input.ids,
+        status: input.status,
+      };
+
+      // Bulk update status
+      const dtos = await todoService.bulkUpdateStatus(bulkUpdateInput);
+
+      // Return response
+      res.status(200).json({ data: dtos });
     }
   );
 
