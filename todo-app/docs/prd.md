@@ -47,13 +47,13 @@ The Todo Management Application provides a simple, reliable backend system for c
 - Updating existing todo information (partial updates supported)
 - Changing todo status
 - Deleting todos permanently
-- Listing and filtering todos
+- Listing and filtering todos with comprehensive filter options
 - Viewing individual todo details
-- Searching todos by title and description
 - Automatic status tracking for overdue items
-- Priority management
-- Bulk operations on multiple todos
+- Priority management with default values
+- Bulk operations on multiple todos (atomic, all-or-nothing)
 - Automatic timestamp tracking
+- Field-specific validation with detailed error messages
 
 ### Out of Scope (Current Version)
 - Frontend user interface
@@ -86,11 +86,10 @@ Each todo consists of:
 2. **Update Todo**: Modify information for an existing todo (supports partial updates)
 3. **Change Status**: Update the status of a todo
 4. **Delete Todo**: Permanently remove a todo from the system
-5. **List Todos**: Retrieve todos with optional filtering
+5. **List and Filter Todos**: Retrieve todos with comprehensive filtering options
 6. **View Todo**: Get details of a specific todo
-7. **Search Todos**: Find todos by keyword in title or description
-8. **Bulk Update Status**: Change status for multiple todos at once
-9. **Bulk Delete**: Delete multiple todos at once
+7. **Bulk Update Status**: Change status for multiple todos at once (atomic operation)
+8. **Bulk Delete**: Delete multiple todos at once (atomic operation)
 
 ### 5.3 Automatic Status Management
 The system automatically calculates todo status on-demand (when viewing or listing):
@@ -110,20 +109,30 @@ The following status transitions are allowed:
 - `due` → `due` (no change)
 - **Not allowed**: `due` → `initial` when the due date is in the past (system prevents this)
 
-### 5.5 Filtering and Search Capabilities
+### 5.5 Filtering Capabilities
 Users can filter todos by:
 - **Status**: Equality and negation filters (equals, notEquals)
-- **Priority**: Equality and negation filters (equals, notEquals)
-- **Due Date**: Range filters (before, after) and negation (notBefore, notAfter)
-- **Title**: Contains/like filters and negation (contains, notContains)
-- **Description**: Contains/like filters and negation (contains, notContains)
+- **Priority**: Equality and negation filters (equals, notEquals) - valid values: low, medium, high, urgent
+- **Due Date**: Range filters (before, after) and negation (notBefore, notAfter) - format: YYYY-MM-DD
+- **Title**: Contains/like filters and negation (contains, notContains) - case-insensitive
+- **Description**: Contains/like filters and negation (contains, notContains) - case-insensitive
+
+**Filter Combination Logic**: All filters are combined using AND logic (all filters must match)
 
 ### 5.6 Validation Rules
+- **ID**: Required (system-generated UUID), cannot be set by user
 - **Title**: Required, maximum 100 characters
 - **Description**: Optional, maximum 1000 characters
-- **Due Date**: Optional, must not be in the past (at creation or update), date only (no time)
-- **Status**: Cannot be set by user during creation (defaults to `initial`); cannot be manually set to `due`
-- **Priority**: Optional, valid priority values only
+- **Due Date**: Optional, must not be in the past (at creation or update), date format YYYY-MM-DD, date only (no time)
+- **Status**: Required (system-managed), cannot be set by user during creation (defaults to `initial`); cannot be manually set to `due`
+- **Priority**: Required, must be one of: low, medium, high, urgent. Defaults to "medium" if not specified during creation. Must always be set to a valid value during updates.
+- **Created At**: Required (system-generated timestamp), cannot be set by user
+- **Modified At**: Required (system-generated timestamp), automatically updated on successful update operations that result in actual changes
+
+### 5.7 Error Handling
+- Validation errors are returned with field-specific error messages
+- Error messages are detailed and include guidance on how to fix the issue
+- Filter validation errors clearly indicate invalid filter parameters with correction guidance
 
 ---
 
@@ -135,16 +144,18 @@ Users can filter todos by:
 **So that** I can capture tasks I need to complete
 
 **Acceptance Criteria:**
-- User must provide a title for the todo (maximum 100 characters)
-- User can optionally provide a description for the todo (maximum 1000 characters)
-- User can optionally set a due date for the todo (must not be in the past, date only)
-- User can optionally set a priority for the todo
-- User cannot set the status during creation (automatically defaults to `initial`)
+- User must provide a title for the todo (required, maximum 100 characters)
+- User can optionally provide a description for the todo (optional, maximum 1000 characters)
+- User can optionally set a due date for the todo (optional, must not be in the past, format YYYY-MM-DD, date only)
+- User can optionally set a priority for the todo (optional in API, valid values: low, medium, high, urgent)
+- If priority is not specified, it defaults to "medium"
+- User cannot set the status during creation (required, automatically defaults to `initial`)
+- User cannot set the ID during creation (required, system-generated UUID)
 - Todo is saved and assigned a unique identifier (UUID)
-- Created at and modified at timestamps are automatically set
+- Created at and modified at timestamps are automatically set (required)
 - User receives confirmation that the todo was created successfully with detailed success message
 - All provided information is stored accurately
-- If validation fails, user receives detailed error message with guidance on how to fix the issue
+- If validation fails, user receives field-specific error messages with guidance on how to fix the issue
 
 ---
 
@@ -154,18 +165,20 @@ Users can filter todos by:
 **So that** I can correct mistakes or add new information as my tasks evolve
 
 **Acceptance Criteria:**
-- User can identify which todo to update using its UUID
-- User can modify the title (maximum 100 characters)
-- User can modify the description (maximum 1000 characters)
-- User can modify the due date (must not be in the past, or can be cleared)
-- User can modify the priority
-- User can modify the status (except cannot manually set to `due`)
+- User can identify which todo to update using its UUID (required)
+- User can modify the title (required, maximum 100 characters)
+- User can modify the description (optional, maximum 1000 characters)
+- User can modify the due date (optional, must not be in the past, format YYYY-MM-DD, or can be cleared)
+- User can modify the priority (required, must be one of: low, medium, high, urgent)
+- User can modify the status (required, except cannot manually set to `due`)
 - Partial updates are supported - only the specified fields are modified; unspecified fields remain unchanged
-- Modified at timestamp is automatically updated
+- Modified at timestamp is automatically updated only when the update is successful and results in actual changes (required)
+- User cannot modify the ID (required, immutable)
+- User cannot modify the created at timestamp (required, immutable)
 - Changes are saved with last-write-wins concurrency model
 - User receives confirmation that the todo was updated successfully with detailed success message
-- If the todo doesn't exist, user receives detailed error message
-- If validation fails, user receives detailed error message with guidance
+- If the todo doesn't exist, user receives field-specific error message
+- If validation fails, user receives field-specific error messages with guidance
 
 ---
 
@@ -204,22 +217,24 @@ Users can filter todos by:
 
 ### Story 5: List and Filter Todos
 **As a** user  
-**I want to** view a list of todos with filtering options  
+**I want to** view a list of todos with comprehensive filtering options  
 **So that** I can see all my tasks or focus on specific subsets
 
 **Acceptance Criteria:**
 - User can retrieve a list of all todos without filters
-- Each todo in the list shows: UUID, title, description, status, due date, priority, created at, and modified at
+- Each todo in the list shows: UUID (required), title (required), description (optional), status (required), due date (optional), priority (required), created at (required), and modified at (required)
 - User can filter by status using equality (equals, notEquals)
-- User can filter by priority using equality (equals, notEquals)
-- User can filter by due date using range filters (before, after, notBefore, notAfter)
-- User can filter by title using contains/like filters (contains, notContains)
-- User can filter by description using contains/like filters (contains, notContains)
-- Multiple filters can be applied together
+- User can filter by priority using equality (equals, notEquals) - values: low, medium, high, urgent
+- User can filter by due date using range filters (before, after, notBefore, notAfter) - format: YYYY-MM-DD
+- User can filter by title using contains/like filters (contains, notContains) - case-insensitive
+- User can filter by description using contains/like filters (contains, notContains) - case-insensitive
+- Multiple filters can be applied together using AND logic (all filters must match)
 - List includes todos with all status types (initial, complete, due)
 - If no todos match the criteria, user receives an empty list
 - List reflects the current state of all todos including dynamically calculated status updates
 - Status is calculated on-demand for each todo based on current date and due date
+- Stored status is never automatically updated to `due`; filtering works on the calculated status
+- If filter validation fails, user receives field-specific error messages with guidance
 
 ---
 
@@ -229,11 +244,12 @@ Users can filter todos by:
 **So that** I can see all information about a particular task
 
 **Acceptance Criteria:**
-- User can identify which todo to view using its UUID
-- System returns the complete information for that todo: UUID, title, description, status, due date, priority, created at, and modified at
+- User can identify which todo to view using its UUID (required)
+- System returns the complete information for that todo: UUID (required), title (required), description (optional), status (required), due date (optional), priority (required), created at (required), and modified at (required)
 - Information reflects the current state of the todo
 - Status is calculated on-demand based on current date and due date
-- If the todo doesn't exist, user receives detailed error message
+- Stored status is never automatically updated to `due`
+- If the todo doesn't exist, user receives field-specific error message
 
 ---
 
@@ -254,68 +270,54 @@ Users can filter todos by:
 
 ---
 
-### Story 8: Search Todos
-**As a** user  
-**I want to** search for todos by keywords in their title or description  
-**So that** I can quickly find specific tasks without scanning through the entire list
-
-**Acceptance Criteria:**
-- User can provide a search keyword or phrase
-- System searches in both title and description fields
-- Search is case-insensitive
-- Search returns all todos where the keyword appears in title or description
-- Search results show: UUID, title, description, status, due date, priority, created at, and modified at
-- If no todos match the search, user receives an empty list
-- Search results reflect current status (calculated on-demand)
-
----
-
-### Story 9: Bulk Update Status
+### Story 8: Bulk Update Status
 **As a** user  
 **I want to** change the status of multiple todos at once  
 **So that** I can efficiently manage multiple tasks simultaneously
 
 **Acceptance Criteria:**
-- User can specify multiple todo UUIDs to update
-- User can set a new status (`initial` or `complete`) for all specified todos
+- User can specify multiple todo UUIDs to update (maximum 100 todos per operation)
+- User can set a new status (`initial` or `complete`) for all specified todos (required)
 - Cannot bulk-set status to `due` (same restriction as single update)
 - Status transition rules apply to each todo individually
-- If any todo would violate transition rules, that specific update is rejected with detailed error
-- Modified at timestamp is automatically updated for all successfully updated todos
-- User receives confirmation indicating which todos were updated successfully and which failed
-- If a todo doesn't exist, that specific todo is reported in the error response
-- Operation continues for other valid todos even if some fail
+- Operation is atomic: all or nothing - if any todo update fails, entire operation is rolled back
+- If any todo would violate transition rules, entire operation fails with field-specific error messages
+- If any todo doesn't exist, entire operation fails with field-specific error message
+- Modified at timestamp is automatically updated for all updated todos only if entire operation succeeds
+- User receives confirmation that all todos were updated successfully, or detailed error message if operation failed
+- If validation fails, user receives field-specific error messages with guidance
 
 ---
 
-### Story 10: Bulk Delete Todos
+### Story 9: Bulk Delete Todos
 **As a** user  
 **I want to** delete multiple todos at once  
 **So that** I can efficiently clean up completed or irrelevant tasks
 
 **Acceptance Criteria:**
-- User can specify multiple todo UUIDs to delete
-- All specified todos are permanently and immediately removed from the system
-- User receives confirmation indicating which todos were deleted successfully
-- If a todo doesn't exist, that specific todo is reported in the error response
-- Operation continues for other valid todos even if some don't exist
+- User can specify multiple todo UUIDs to delete (maximum 100 todos per operation)
+- Operation is atomic: all or nothing - if any todo deletion fails, entire operation is rolled back
+- If any todo doesn't exist, entire operation fails with field-specific error message
+- All specified todos are permanently and immediately removed from the system only if entire operation succeeds
+- User receives confirmation that all todos were deleted successfully, or detailed error message if operation failed
 - There is no recovery mechanism for bulk-deleted todos
 
 ---
 
-### Story 11: Manage Todo Priority
+### Story 10: Manage Todo Priority
 **As a** user  
 **I want to** assign priority levels to my todos  
 **So that** I can focus on the most important tasks
 
 **Acceptance Criteria:**
-- User can set priority when creating a todo
-- User can update priority when updating a todo
-- User can clear priority (set to no priority)
-- User can filter todos by priority when listing
-- Priority is displayed when viewing or listing todos
-- Valid priority values are clearly defined
-- If invalid priority is provided, user receives detailed error message with guidance
+- User can optionally set priority when creating a todo (optional in API)
+- If priority is not specified during creation, it defaults to "medium"
+- User must provide a valid priority when updating a todo (required)
+- Valid priority values are: low, medium, high, urgent (in priority order)
+- Priority cannot be cleared - it must always have one of the valid values
+- User can filter todos by priority when listing (equals, notEquals)
+- Priority is displayed when viewing or listing todos (required)
+- If invalid priority is provided, user receives field-specific error message with guidance
 
 ---
 
@@ -325,15 +327,16 @@ Users can filter todos by:
 - Number of todos created
 - Frequency of status updates
 - Ratio of completed to created todos
-- Usage of filtering and search features
+- Usage of filtering features
 - Usage of bulk operations
+- Distribution of priority usage (low, medium, high, urgent)
 
 ### System Performance
 - Time to create a todo
 - Time to retrieve filtered todo list
 - Time to update a todo
-- Time to perform search operations
 - Time to execute bulk operations
+- Filter validation response time
 
 ### User Value
 - Percentage of todos marked as complete
@@ -350,12 +353,18 @@ Users can filter todos by:
 - The system maintains accurate date information for due date tracking
 - Todos are independent and have no relationships to each other
 - The system has sufficient storage for todos and their metadata
-- Due dates use date only (no time component) and are stored/compared consistently
+- Due dates use date only (no time component) in YYYY-MM-DD format and are stored/compared consistently
 - The system clock is accurate for calculating overdue status
 - Concurrent operations follow last-write-wins model
-- Error messages can include detailed information and guidance without security concerns
+- Error messages are field-specific and include detailed information and guidance without security concerns
 - Filters can be combined using AND logic (all filters must match)
-- Priority values are predefined and limited
+- Filter validation errors provide clear guidance on correction
+- Priority values are predefined and limited to: low, medium, high, urgent (in priority order)
+- Priority always has a value (defaults to "medium" on creation if not specified)
+- Bulk operations are atomic (all or nothing) with a maximum of 100 todos per operation
+- There are no uniqueness constraints on any fields
+- String filters (contains, notContains) are case-insensitive
+- Stored status is never automatically updated to `due`; status is calculated on-demand for display and filtering
 
 ---
 
@@ -378,7 +387,16 @@ While not in the current scope, these features may be considered for future rele
 - Attachments or file links
 - Comments or notes on todos
 - Todo dependencies or relationships
-- Reminders and notifications
 - Calendar integration
 - Activity logs and change history
+- Default filter/view for active todos
+- Todo count summary statistics
+- Batch create operation
+- Clear all completed todos operation
+- Smart dates (relative date filtering)
+- Status history flag (wasOverdue)
+- Bulk get by IDs
+- Due date warnings (dueSoon status)
+- Todo templates
+- Import/export functionality
 
