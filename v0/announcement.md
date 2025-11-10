@@ -1,6 +1,6 @@
 # WAP: Bringing Natural Language to the Web for all
 
-*A cooperative protocol that makes every website conversational - no new browser or software required*
+*A cooperative protocol that makes every website conversational - no new browser, software, or device needed*
 
 ![WAP Browser Experience](./assets/wap-shopping-app-1.png "WAP Browser Experience")
 ---
@@ -41,8 +41,6 @@ Think of it like the chatbot widgets you already see on thousands of websites. E
 ### How It Works (The Simple Version)
 
 ![WAP Orchestration Experience](./assets/wap-shopping-app-2.png "WAP Orchestration Experience")
-
-*Figure 1: WAP Orchestrator Flow - Simple and Familiar*
 
 **Three ingredients:**
 
@@ -116,7 +114,7 @@ Visits `https://todoapp.com?agentmode=1`
 
 ![Todo Agentic Execution](./assets/wap-todo-screenshot.png "Todo Agentic Execution")
 
-*Figure 2: Multi-step workflow executed through natural language - [See Full Implementation](./todo-management-example.md)*
+*Figure 2: Multi-step workflow executed through natural language - [See Full Implementation](https://github.com/midearth-labs/web-agent-protocol/blob/main/v0/todo-management-example.md)*
 
 No DOM parsing. No computer vision. No accessibility tree navigation. Just clean API calls and website functionality dynamically orchestrated by natural language.
 
@@ -211,31 +209,8 @@ Structured APIs with explicit contracts mean predictable, testable behavior. No 
 ### 5. Performant
 Direct API calls are 5-10x faster than alternatives that require page navigation, visual processing, and DOM manipulation.
 
-```mermaid
-graph LR
-    A[WAP Design Principles] --> B[Cooperative]
-    A --> C[Secure]
-    A --> D[Private]
-    A --> E[Reliable]
-    A --> F[Fast]
-    
-    B --> B1[Sites opt-in<br/>Full control maintained<br/>Monetization preserved]
-    
-    C --> C1[Same-origin policy<br/>CORS respected<br/>No new attack surface]
-    
-    D --> D1[Direct site communication<br/>No third-party intercept<br/>Existing session model]
-    
-    E --> E1[Explicit API contracts<br/>Structured data<br/>Predictable behavior]
-    
-    F --> F1[Direct API calls<br/>No DOM processing<br/>Parallel execution]
-    
-    style A fill:#4CAF50,color:#fff
-    style B fill:#2196F3,color:#fff
-    style C fill:#2196F3,color:#fff
-    style D fill:#2196F3,color:#fff
-    style E fill:#2196F3,color:#fff
-    style F fill:#2196F3,color:#fff
-```
+![WAP Design](./assets/wap_design.png "WAP Design")
+
 
 *Figure 3: WAP's Core Architecture*
 
@@ -313,7 +288,7 @@ Investments/advancements in these directions would make WAP be more effective
 - Browsers/W3C Specs to solve safe multi website interactions and build on-top of WAP.
 - On-device inferencing would even increase privacy
 
-[Try the Interactive Demo](./live-demo.md)
+[Try the Interactive Demo](https://github.com/midearth-labs/web-agent-protocol/blob/main/v0/live-demo.md)
 
 ---
 
@@ -330,13 +305,13 @@ WAP offers a path forward that works for everyone.
 **Upcoming Resources:**
 
 Please note, these resources are still being worked on
-- [Complete Technical Specification](./technical-design.md)
-- [Todo Management Example (Full Implementation)](./todo-management-example.md)
-- [Amazon CoPilot Mode Example](./amazon-copilot-example.md)
-- [WAP vs. Current Solutions (Detailed Comparison)](./solutions-comparison.md)
-- [Adoption Strategy & Economics](./adoption-strategy.md)
-- [Security Model Deep Dive](./security-model.md)
-- [Interactive Demo](./live-demo.md)
+- [Complete Technical Specification](https://github.com/midearth-labs/web-agent-protocol/blob/main/v0/technical-design.md)
+- [Todo Management Example (Full Implementation)](https://github.com/midearth-labs/web-agent-protocol/blob/main/v0/todo-management-example.md)
+- [Amazon CoPilot Mode Example](https://github.com/midearth-labs/web-agent-protocol/blob/main/v0/amazon-copilot-example.md)
+- [WAP vs. Current Solutions (Detailed Comparison)](https://github.com/midearth-labs/web-agent-protocol/blob/main/v0/solutions-comparison.md)
+- [Adoption Strategy & Economics](https://github.com/midearth-labs/web-agent-protocol/blob/main/v0/adoption-strategy.md)
+- [Security Model Deep Dive](https://github.com/midearth-labs/web-agent-protocol/blob/main/v0/security-model.md)
+- [Interactive Demo](https://github.com/midearth-labs/web-agent-protocol/blob/main/v0/live-demo.md)
 
 **References:**
 
