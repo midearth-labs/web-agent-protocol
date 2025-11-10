@@ -333,6 +333,7 @@ type BulkDeleteRequest = {
  * All methods use flattened input/output types:
  * - Input: params, query, and body are combined into a single flat object
  * - Output: response wrappers are unwrapped (e.g., Todo instead of { data: Todo })
+ * - Methods could be tagged with the following @tags: ["mutating", "readonly", "filterable", "batch", "search", "create", "read", "list", "update", "delete", "sortable", "patch", "idempotent", "async", "paginated", "async-status-check", "compensating", "rate-limited", "not-rate-limited", "cached"]
  */
 interface IApiClient {
   /**
@@ -351,6 +352,8 @@ interface IApiClient {
    *   dueDate: "2025-12-31",
    *   priority: "high"
    * });
+   * 
+   * @tags: ["mutating", "create"]
    */
   createTodo(request: CreateTodoRequest): Promise<Todo>;
 
@@ -396,6 +399,8 @@ interface IApiClient {
    *   title: "notContains:urgent",
    *   priority: "notEquals:urgent"
    * });
+   * 
+   * @tags: ["readonly", "filterable", "list", "search"]
    */
   listTodos(request?: ListTodosQuery): Promise<Todo[]>;
 
@@ -412,6 +417,8 @@ interface IApiClient {
    * const todo = await client.getTodoById({
    *   id: "550e8400-e29b-41d4-a716-446655440000"
    * });
+   * 
+   * @tags: ["readonly", "read"]
    */
   getTodoById(request: GetTodoByIdRequest): Promise<Todo>;
 
@@ -431,6 +438,8 @@ interface IApiClient {
    *   status: "complete",
    *   priority: "urgent"
    * });
+   * 
+   * @tags: ["mutating", "update", "patch"]
    */
   updateTodo(request: UpdateTodoRequest): Promise<Todo>;
 
@@ -447,6 +456,8 @@ interface IApiClient {
    * await client.deleteTodo({
    *   id: "550e8400-e29b-41d4-a716-446655440000"
    * });
+   * 
+   * @tags: ["mutating", "delete"]
    */
   deleteTodo(request: DeleteTodoRequest): Promise<void>;
 
@@ -479,6 +490,8 @@ interface IApiClient {
    *   const batch = allTodoIds.slice(i, i + batchSize);
    *   await client.bulkUpdateStatus({ ids: batch, status: "complete" });
    * }
+   * 
+   * @tags: ["mutating", "batch", "update", "patch"]
    */
   bulkUpdateStatus(request: BulkUpdateStatusRequest): Promise<Todo[]>;
 
@@ -510,6 +523,8 @@ interface IApiClient {
    *   const batch = allTodoIds.slice(i, i + batchSize);
    *   await client.bulkDelete({ ids: batch });
    * }
+   * 
+   * @tags: ["mutating", "batch", "delete"]
    */
   bulkDelete(request: BulkDeleteRequest): Promise<void>;
 }
