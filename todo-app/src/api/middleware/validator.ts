@@ -37,8 +37,8 @@ export function validateQuery<T>(schema: ZodType<T>) {
       return;
     }
 
-    // Replace query with validated data
-    req.query = result.data as any;
+    // Merge validated data into query object (can't replace read-only property)
+    Object.assign(req.query, result.data);
     next();
   };
 }
@@ -56,8 +56,8 @@ export function validateParams<T>(schema: ZodType<T>) {
       return;
     }
 
-    // Replace params with validated data
-    req.params = result.data as any;
+    // Merge validated data into params object (can't replace read-only property)
+    Object.assign(req.params, result.data);
     next();
   };
 }

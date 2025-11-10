@@ -19,6 +19,7 @@ import assert from "node:assert";
 import { ApiClient } from "./api-client.js";
 import type {
   CreateTodoRequest,
+  UpdateTodoRequest,
 } from "../models/api-model.js";
 
 // Test configuration
@@ -52,16 +53,18 @@ function getPastDate(daysAgo: number): string {
 describe("ApiClient E2E Tests", () => {
   let client: ApiClient;
   const createdTodoIds: string[] = [];
+  const deletedTodoIds: string[] = [];
 
   before(() => {
     client = new ApiClient({ baseUrl: BASE_URL });
   });
 
   after(async () => {
-    // Cleanup: Delete all created todos
-    if (createdTodoIds.length > 0) {
+    // Cleanup: Delete only remaining todos (createdTodoIds minus deletedTodoIds)
+    const remainingIds = createdTodoIds.filter(id => !deletedTodoIds.includes(id));
+    if (remainingIds.length > 0) {
       try {
-        await client.bulkDelete({ body: { ids: createdTodoIds } });
+        await client.bulkDelete({ body: { ids: remainingIds } });
       } catch (error) {
         // Ignore cleanup errors
         console.warn("Cleanup error:", error);
@@ -168,7 +171,7 @@ describe("ApiClient E2E Tests", () => {
       }
     );
   });
-/*
+
   describe("List Todos - No Filters", () => {
     test(
       "should list all todos without filters",
@@ -732,6 +735,7 @@ describe("ApiClient E2E Tests", () => {
 
         // Delete it
         await client.deleteTodo({ params: { id: todoId } });
+        deletedTodoIds.push(todoId);
 
         // Verify it's deleted
         try {
@@ -739,12 +743,6 @@ describe("ApiClient E2E Tests", () => {
           assert.fail("Should have thrown an error for deleted todo");
         } catch (error) {
           assert.ok(error instanceof Error, "Should throw an Error");
-        }
-
-        // Remove from cleanup list since it's already deleted
-        const index = createdTodoIds.indexOf(todoId);
-        if (index > -1) {
-          createdTodoIds.splice(index, 1);
         }
       }
     );
@@ -766,6 +764,7 @@ describe("ApiClient E2E Tests", () => {
 
         // Bulk delete them
         await client.bulkDelete({ body: { ids: todosToDelete } });
+        deletedTodoIds.push(...todosToDelete);
 
         // Verify they're all deleted
         for (const id of todosToDelete) {
@@ -774,14 +773,6 @@ describe("ApiClient E2E Tests", () => {
             assert.fail(`Should have thrown an error for deleted todo ${id}`);
           } catch (error) {
             assert.ok(error instanceof Error, "Should throw an Error");
-          }
-        }
-
-        // Remove from cleanup list since they're already deleted
-        for (const id of todosToDelete) {
-          const index = createdTodoIds.indexOf(id);
-          if (index > -1) {
-            createdTodoIds.splice(index, 1);
           }
         }
       }
@@ -844,6 +835,7 @@ describe("ApiClient E2E Tests", () => {
 
         // 6. Delete the todo
         await client.deleteTodo({ params: { id: todoId } });
+        deletedTodoIds.push(todoId);
 
         // 7. Verify it's deleted
         try {
@@ -852,15 +844,8 @@ describe("ApiClient E2E Tests", () => {
         } catch (error) {
           assert.ok(error instanceof Error, "Should throw an Error");
         }
-
-        // Remove from cleanup list
-        const index = createdTodoIds.indexOf(todoId);
-        if (index > -1) {
-          createdTodoIds.splice(index, 1);
-        }
       }
     );
   });
-  */
 });
 
