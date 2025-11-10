@@ -1,139 +1,184 @@
 # PRD Suggestions
 
-## Enhancements for Consideration
+## Accepted Suggestions (Incorporated in PRD v2.0)
 
-### 1. Filtering and Sorting Capabilities
-**Suggestion**: Add the ability to filter and sort the todo list  
-**Rationale**: When users accumulate many todos, viewing all of them without organization becomes overwhelming. Filtering by status (showing only `initial`, `complete`, or `due` todos) would help users focus on what matters most. Sorting by due date would help prioritize urgent tasks.
+The following suggestions have been accepted and added to the main PRD:
 
-**Potential user stories:**
-- Filter todos by status
-- Sort todos by due date (ascending/descending)
-- Sort todos by creation date
-- Filter todos by date range
+1. ✅ **Filtering and Sorting Capabilities**: Comprehensive filtering added (sorting excluded per feedback)
+2. ✅ **Search Functionality**: Search by title and description keywords
+3. ✅ **Bulk Operations**: Bulk status update and bulk delete
+4. ✅ **Priority Levels**: Priority field added to todos
+5. ✅ **Due Date Optional**: Due dates are now optional
+6. ✅ **Status Transition Rules**: Clear rules defined
+7. ✅ **Creation/Modification Timestamps**: Auto-tracked created at and modified at
+8. ✅ **Partial Updates**: PATCH-style partial updates supported
 
-**Response:** ACCEPT, specific filters have been added to "prd.clarification.md". Do not include sorting. 
 ---
 
-### 2. Search Functionality
-**Suggestion**: Enable searching todos by title or description keywords  
-**Rationale**: As the todo list grows, users need a quick way to find specific tasks without scanning through the entire list. Search would dramatically improve usability for active users.
+## Rejected Suggestions
 
-**Potential user story:**
-- Search todos by keyword in title or description
+The following suggestions have been rejected and moved to Future Considerations:
 
-**Response:** ACCEPT, specific filters have been added to "prd.clarification.md". 
+1. ❌ **Pagination**: Rejected - moved to future considerations
+2. ❌ **Archive Functionality**: Rejected - moved to future considerations
+3. ❌ **Soft Delete**: Rejected - permanent deletion confirmed
+4. ❌ **Tags and Categories**: Rejected - moved to future considerations
+
 ---
 
-### 3. Pagination
-**Suggestion**: Implement pagination for the list todos operation  
-**Rationale**: If a user creates hundreds or thousands of todos, returning all of them in a single response could cause performance issues. Pagination would improve response times and reduce data transfer.
+## New Suggestions for Consideration
 
-**Potential user story:**
-- Retrieve todos in pages of configurable size (e.g., 20, 50, 100 per page)
+### 1. Default Filter/View for Active Todos
+**Suggestion**: Provide a convenient way to get "active" todos (status is initial or due, excluding complete)  
+**Rationale**: Users frequently want to see only tasks they still need to work on. While filters can achieve this, a dedicated "active" view or convenient filter shorthand would improve usability.
 
-**Response:** REJECT 
+**Potential implementation**:
+- Built-in filter preset: `activeOnly=true`
+- Or users simply use: `status.notEquals=complete`
+
 ---
 
-### 4. Bulk Operations
-**Suggestion**: Allow users to perform operations on multiple todos at once  
-**Rationale**: Users often need to perform the same action on multiple items (e.g., marking several todos as complete, deleting multiple old todos). Bulk operations would save time and reduce API calls.
+### 2. Todo Count Summary
+**Suggestion**: Provide count statistics across status types  
+**Rationale**: Users often want to know at a glance how many todos are in each status without retrieving the full list. This is valuable for dashboard displays and quick overview.
 
-**Potential user stories:**
-- Mark multiple todos as complete in one operation
-- Delete multiple todos in one operation
-- Update status for multiple todos
+**Potential user story**:
+- Get count of todos by status (e.g., 15 initial, 3 due, 47 complete)
+- Get count by priority
+- Get count by tag
 
-**Response:** ACCEPT
 ---
 
-### 5. Priority Levels
-**Suggestion**: Add a priority field to todos (e.g., low, medium, high, urgent)  
-**Rationale**: Not all tasks are equally important. Priority levels would help users focus on high-impact work even when many tasks have similar due dates.
+### 3. Sort by Created/Modified Timestamp
+**Suggestion**: While sorting was excluded, consider allowing sort by timestamp fields  
+**Rationale**: Sorting was generally rejected, but sorting by creation date (newest/oldest first) is extremely common and valuable for seeing recent activity. Modified timestamp sorting helps identify recently worked-on todos.
 
-**Potential user story:**
-- Assign priority level when creating or updating a todo
-- Sort or filter todos by priority
+**Potential user story**:
+- List todos ordered by created date (newest first)
+- List todos ordered by modified date (most recently updated first)
 
-**Response:** ACCEPT
 ---
 
-### 6. Archive Functionality
-**Suggestion**: Instead of deleting completed todos, allow users to archive them  
-**Rationale**: Users may want to maintain a history of completed work for reference, reporting, or motivation. Archiving provides this benefit while keeping the active list clean. Archived todos wouldn't appear in the standard list view.
+### 4. Batch Create
+**Suggestion**: Allow creating multiple todos in a single operation  
+**Rationale**: Users sometimes want to capture multiple tasks quickly (e.g., breaking down a project into tasks). Batch create reduces API round-trips and improves performance.
 
-**Potential user stories:**
-- Archive completed todos
-- View archived todos separately
-- Restore archived todos to active list
+**Potential user story**:
+- Create multiple todos in one request
+- Receive confirmation with all created todo IDs
+- Partial success handling similar to bulk operations
 
-**Response:** REJECT
 ---
 
-### 7. Todo Categories or Tags
-**Suggestion**: Enable users to organize todos with categories or tags  
-**Rationale**: Users often manage tasks across different areas of life (work, personal, health, etc.). Categories or tags would allow better organization and the ability to focus on specific contexts.
+### 5. Field-Specific Validation Messages
+**Suggestion**: Return validation errors structured by field  
+**Rationale**: When multiple validation errors occur (e.g., title too long AND due date in past), returning structured field-specific errors helps clients display appropriate error messages next to each form field.
 
-**Potential user stories:**
-- Assign one or more tags/categories to a todo
-- Filter todos by category or tag
-- View all available categories/tags
+**Example response structure**:
+```
+{
+  "errors": {
+    "title": "Title exceeds maximum length of 100 characters",
+    "dueDate": "Due date cannot be in the past"
+  }
+}
+```
 
-**Response:** ACCEPT
 ---
 
-### 8. Due Date Optional
-**Suggestion**: Consider making due date optional rather than required  
-**Rationale**: Not all todos have hard deadlines. Some tasks are ongoing, future possibilities, or general reminders without specific timeframes. Making due date optional would accommodate these use cases while maintaining the automatic `due` status functionality for todos that do have due dates.
+### 6. Clear All Completed Todos
+**Suggestion**: Provide a convenient operation to delete all completed todos  
+**Rationale**: Users often want to "clean up" their todo list by removing old completed items. While bulk delete can do this, it requires listing and selecting all completed todo IDs.
 
-**Impact on automatic status:**
-- Todos without due dates would never automatically become `due`
-- Only todos with due dates would have automatic status updates
+**Potential user story**:
+- Delete all todos with status=complete in one operation
+- Optionally with date range (e.g., completed before a certain date)
 
-**Response:** ACCEPT, specific behaviour has been defined in "prd.clarification.md". 
 ---
 
-### 9. Status Transition Rules
-**Suggestion**: Define clear rules about which status transitions are allowed  
-**Rationale**: Some status changes might not make logical sense (e.g., going from `complete` back to `initial` might indicate data quality issues). Defining allowed transitions would maintain data integrity.
+### 7. Smart Dates
+**Suggestion**: Support relative date filtering (e.g., today, tomorrow, this week, next week)  
+**Rationale**: Users think in relative terms ("what's due today?"). While absolute dates work, relative date shortcuts improve usability.
 
-**Example rules:**
-- `initial` can transition to `complete` or remain `initial`
-- `due` can transition to `complete` or remain `due`
-- `complete` can only remain `complete` (or perhaps transition back to `initial` with clear intent)
+**Potential enhancements**:
+- Filter by: `dueDate=today`, `dueDate=tomorrow`, `dueDate=thisWeek`
+- Calculate based on current date when query is executed
 
-**Response:** ACCEPT, all transitions can happen except those disallowed as clarified in "prd.clarification.md"
 ---
 
-### 10. Soft Delete
-**Suggestion**: Implement soft delete instead of permanent deletion  
-**Rationale**: Users sometimes delete todos accidentally. Soft delete (marking as deleted but retaining data) allows recovery while still removing items from normal views. A permanent deletion could be performed after a retention period.
+### 8. Status History Flag
+**Suggestion**: Track whether a todo was ever overdue  
+**Rationale**: Even if a todo is later completed, knowing it was once overdue provides valuable insights about task management and planning accuracy. This is simpler than full history tracking.
 
-**Potential user stories:**
-- Deleted todos move to a "trash" state
-- View deleted todos within a retention period
-- Restore deleted todos
-- Permanently delete after retention period expires
+**Potential implementation**:
+- Boolean field: `wasOverdue`
+- Set to true once a todo's status calculates to `due`
+- Persists even after completion
 
-**Response:** REJECT 
 ---
 
-### 11. Creation and Modification Timestamps
-**Suggestion**: Automatically track when each todo is created and last modified  
-**Rationale**: Timestamps provide valuable context (when was this task added?), enable sorting by recency, and support audit trails. This metadata is valuable for analytics and user insights.
+### 9. Required vs Optional Fields Clarity
+**Suggestion**: Add explicit markers in all documentation for required vs optional fields  
+**Rationale**: While validation rules specify this, having clear indication everywhere (data model, user stories, etc.) prevents confusion.
 
-**Data to track:**
-- Created timestamp
-- Last modified timestamp
-- Possibly: created by, modified by (for future multi-user scenarios)
+**Enhancement**: Update PRD to mark every field explicitly as (required) or (optional)
 
-**Response:** ACCEPT 
 ---
 
-### 12. Partial Updates
-**Suggestion**: Clarify whether updates must include all fields or support partial updates  
-**Rationale**: In the current PRD, it's unclear if users must provide all fields when updating or if they can update just one field (e.g., only the title). Partial updates are more user-friendly but require clear specification.
+### 10. Bulk Get by IDs
+**Suggestion**: Allow retrieving multiple specific todos by their IDs in one request  
+**Rationale**: When a client needs to refresh several specific todos (not all todos), fetching them individually is inefficient. Bulk get improves performance.
 
-**Recommendation**: Support partial updates where only specified fields are modified
+**Potential user story**:
+- Retrieve multiple todos by providing a list of UUIDs
+- Returns todos that exist, with clear indication of any IDs not found
 
-**Response:** ACCEPT 
+---
+
+### 11. Due Date Warnings
+**Suggestion**: Add a "dueSoon" calculated status or filter for approaching deadlines  
+**Rationale**: Users want to know about tasks due soon (e.g., within next 3 days), not just overdue tasks. This is more actionable than only showing already-overdue items.
+
+**Potential implementation**:
+- New calculated status: `dueSoon` (e.g., due within 3 days)
+- Or filter: `dueDate.within=3days`
+- Configurable threshold?
+
+**Note**: Adds complexity to status model, might conflict with current simple three-status design.
+
+---
+
+### 12. Filter Validation and Error Messages
+**Suggestion**: Validate filter parameters and provide clear error messages for invalid filters  
+**Rationale**: Users might make mistakes in filter syntax, use invalid values, or combine incompatible filters. Clear validation helps them correct mistakes.
+
+**Examples**:
+- Invalid date format in dueDate filter
+- Unknown field name in filter
+- Invalid priority value
+- Incompatible filter combinations
+
+---
+
+### 13. Todo Templates
+**Suggestion**: Allow saving todo configurations as templates for quick creation  
+**Rationale**: Recurring similar tasks (e.g., weekly meeting prep, monthly reports) benefit from templates to avoid retyping same information.
+
+**Potential user stories**:
+- Save a todo as a template
+- Create a new todo from a template
+- List available templates
+
+**Note**: This is relatively complex and might fit better in future considerations.
+
+---
+
+### 14. Import/Export
+**Suggestion**: Provide ability to export all todos (e.g., JSON format) and import them back  
+**Rationale**: Users might want to backup their todos, migrate to another system, or share their todo list. Export/import facilitates this.
+
+**Potential formats**:
+- JSON (native format)
+- CSV (for spreadsheet compatibility)
+
+**Note**: Better suited for future considerations due to scope.
