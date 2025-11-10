@@ -36,6 +36,7 @@ The following suggestions have been rejected and moved to Future Considerations:
 - Built-in filter preset: `activeOnly=true`
 - Or users simply use: `status.notEquals=complete`
 
+**Answer**: REJECT
 ---
 
 ### 2. Todo Count Summary
@@ -47,6 +48,7 @@ The following suggestions have been rejected and moved to Future Considerations:
 - Get count by priority
 - Get count by tag
 
+**Answer**: REJECT
 ---
 
 ### 3. Sort by Created/Modified Timestamp
@@ -57,6 +59,7 @@ The following suggestions have been rejected and moved to Future Considerations:
 - List todos ordered by created date (newest first)
 - List todos ordered by modified date (most recently updated first)
 
+**Answer**: REJECT
 ---
 
 ### 4. Batch Create
@@ -68,6 +71,7 @@ The following suggestions have been rejected and moved to Future Considerations:
 - Receive confirmation with all created todo IDs
 - Partial success handling similar to bulk operations
 
+**Answer**: REJECT
 ---
 
 ### 5. Field-Specific Validation Messages
@@ -84,6 +88,7 @@ The following suggestions have been rejected and moved to Future Considerations:
 }
 ```
 
+**Answer**: ACCEPT, this also applies to Batch APIs
 ---
 
 ### 6. Clear All Completed Todos
@@ -94,6 +99,7 @@ The following suggestions have been rejected and moved to Future Considerations:
 - Delete all todos with status=complete in one operation
 - Optionally with date range (e.g., completed before a certain date)
 
+**Answer**: REJECT
 ---
 
 ### 7. Smart Dates
@@ -104,6 +110,7 @@ The following suggestions have been rejected and moved to Future Considerations:
 - Filter by: `dueDate=today`, `dueDate=tomorrow`, `dueDate=thisWeek`
 - Calculate based on current date when query is executed
 
+**Answer**: REJECT
 ---
 
 ### 8. Status History Flag
@@ -115,6 +122,7 @@ The following suggestions have been rejected and moved to Future Considerations:
 - Set to true once a todo's status calculates to `due`
 - Persists even after completion
 
+**Answer**: REJECT
 ---
 
 ### 9. Required vs Optional Fields Clarity
@@ -123,6 +131,7 @@ The following suggestions have been rejected and moved to Future Considerations:
 
 **Enhancement**: Update PRD to mark every field explicitly as (required) or (optional)
 
+**Answer**: ACCEPT
 ---
 
 ### 10. Bulk Get by IDs
@@ -133,6 +142,7 @@ The following suggestions have been rejected and moved to Future Considerations:
 - Retrieve multiple todos by providing a list of UUIDs
 - Returns todos that exist, with clear indication of any IDs not found
 
+**Answer**: REJECT
 ---
 
 ### 11. Due Date Warnings
@@ -146,6 +156,7 @@ The following suggestions have been rejected and moved to Future Considerations:
 
 **Note**: Adds complexity to status model, might conflict with current simple three-status design.
 
+**Answer**: REJECT
 ---
 
 ### 12. Filter Validation and Error Messages
@@ -158,6 +169,7 @@ The following suggestions have been rejected and moved to Future Considerations:
 - Invalid priority value
 - Incompatible filter combinations
 
+**Answer**: ACCEPT
 ---
 
 ### 13. Todo Templates
@@ -171,6 +183,7 @@ The following suggestions have been rejected and moved to Future Considerations:
 
 **Note**: This is relatively complex and might fit better in future considerations.
 
+**Answer**: REJECT
 ---
 
 ### 14. Import/Export
@@ -182,3 +195,5 @@ The following suggestions have been rejected and moved to Future Considerations:
 - CSV (for spreadsheet compatibility)
 
 **Note**: Better suited for future considerations due to scope.
+
+**Answer**: REJECT

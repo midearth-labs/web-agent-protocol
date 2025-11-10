@@ -69,15 +69,15 @@ The Todo Management Application provides a simple, reliable backend system for c
 
 ### 5.1 Todo Data Model
 Each todo consists of:
-- **ID**: Unique identifier (UUID format)
+- **ID**: Unique identifier (UUID format, required)
 - **Title**: A brief name or description of the task (maximum 100 characters, required)
 - **Description**: Detailed information about the task (maximum 1000 characters, optional)
-- **Status**: Current state of the todo (system-managed)
+- **Status**: Current state of the todo (system-managed, required)
   - `initial`: Newly created or in-progress (default on creation)
   - `complete`: Task has been finished
   - `due`: Task deadline has passed and task is not complete (automatically set, cannot be manually set by user)
 - **Due Date**: The deadline by which the task should be completed (date only, no time component, optional, cannot be set to past dates)
-- **Priority**: Importance level of the task (optional)
+- **Priority**: Importance level of the task (required)
 - **Created At**: Timestamp when the todo was created (automatically set)
 - **Modified At**: Timestamp when the todo was last updated (automatically updated)
 

@@ -40,7 +40,7 @@ The following questions have been answered and incorporated into PRD v2.0:
 - Is there a default priority?
 - Should priorities have an implied ordering?
 
-**Answer**: Named levels: low, medium, high, urgent. in that order
+**Answer**: Named levels: low, medium, high, urgent. in that order. Default priority is "medium" which should be set if user does not specify on creation. On update, it must always be set to a valid value.
 ---
 
 ### 2. Filter Combination Logic
@@ -106,6 +106,7 @@ The following questions have been answered and incorporated into PRD v2.0:
 
 **Recommendation Needed**: Specify how optional/empty fields are represented and queried.
 
+**Answer**: Priority will now always have a value. it will be optional in the API, but 
 ---
 
 ### 6. Modified At Timestamp Behavior
@@ -119,6 +120,7 @@ The following questions have been answered and incorporated into PRD v2.0:
 
 **Recommendation Needed**: Specify exactly when modified at timestamp is updated.
 
+**Answer**: Update timestamp on a successful update operation (with actual changes)
 ---
 
 ### 7. Date Format and Parsing
@@ -132,6 +134,7 @@ The following questions have been answered and incorporated into PRD v2.0:
 
 **Recommendation Needed**: Specify exact date format for input and output.
 
+**Answer**: YYYY-MM-DD
 ---
 
 ### 8. Filter Operator Syntax
@@ -145,6 +148,7 @@ The following questions have been answered and incorporated into PRD v2.0:
 
 **Recommendation Needed**: This may be a technical detail, but clarify if there's a preferred approach or if this is left to implementation.
 
+**Answer**: Implementation detail. This will be ideated on in later stages.
 ---
 
 ### 9. Case Sensitivity for String Filters
@@ -159,6 +163,7 @@ The following questions have been answered and incorporated into PRD v2.0:
 - Title contains filter
 - Description contains filter
 
+**Answer**: Case-insensitive
 ---
 
 ### 10. Bulk Operations List Size Limits
@@ -168,6 +173,7 @@ The following questions have been answered and incorporated into PRD v2.0:
 
 **Recommendation Needed**: Should there be a maximum limit (e.g., 100 todos per bulk operation)?
 
+**Answer**: 100
 ---
 
 ### 11. Stored vs Calculated Status Clarification
@@ -180,6 +186,7 @@ The following questions have been answered and incorporated into PRD v2.0:
 
 **Recommendation Needed**: Confirm that stored status is never automatically updated to `due`, and filtering works on calculated status.
 
+**Answer**: never updated. filtering works on calculated status
 ---
 
 ### 12. Uniqueness Constraints
@@ -191,3 +198,5 @@ The following questions have been answered and incorporated into PRD v2.0:
 - Any uniqueness constraints at all?
 
 **Recommendation Needed**: Confirm there are no uniqueness constraints, or specify if any exist.
+
+**Answer**: No uniqueness constraints
