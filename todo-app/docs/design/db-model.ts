@@ -234,75 +234,65 @@ export type PaginatedResult<T> = {
 };
 
 // ============================================================================
-// Database Configuration Types
+// Storage Configuration Types
 // ============================================================================
 
 /**
- * Configuration for database connection
+ * Configuration for JSON file storage
  */
-export type DatabaseConfig = {
-  host: string;
-  port: number;
-  database: string;
-  username: string;
-  password: string;
-  poolSize?: number;
-  connectionTimeout?: number;
-  ssl?: boolean;
+export type FileStorageConfig = {
+  filePath: string;
+  lockTimeout?: number; // milliseconds, default 5000
+  lockRetries?: number; // number of retry attempts, default 3
+  prettyPrint?: boolean; // format JSON with indentation, default false
+  backupEnabled?: boolean; // create backup files, default false
+  backupPath?: string; // backup file location
 };
-
-/**
- * Transaction isolation levels (for future use)
- */
-export type IsolationLevel = "READ_UNCOMMITTED" | "READ_COMMITTED" | "REPEATABLE_READ" | "SERIALIZABLE";
 
 // ============================================================================
 // Utility Types
 // ============================================================================
 
 /**
- * Type for database raw query results
- * Before transformation to TodoEntity
+ * JSON file structure (key-value store)
+ * Key: UUID string
+ * Value: TodoEntity
  */
-export type TodoRow = {
-  id: string;
-  title: string;
-  description: string | null;
-  status: string; // Will be validated and cast to StoredStatus
-  due_date: string | null; // Snake case from database
-  priority: string; // Will be validated and cast to Priority
-  created_at: Date; // Snake case from database
-  modified_at: Date; // Snake case from database
+export type TodosFileContent = Record<string, TodoEntity>;
+
+/**
+ * File operation result
+ */
+export type FileOperationResult<T> =
+  | { success: true; data: T }
+  | { success: false; error: FileOperationError };
+
+/**
+ * File operation errors
+ */
+export type FileOperationError = {
+  code: FileErrorCode;
+  message: string;
+  details?: Record<string, unknown>;
 };
 
 /**
- * Mapping between database column names and entity field names
+ * File error codes
  */
-export const COLUMN_MAPPING = {
-  id: "id",
-  title: "title",
-  description: "description",
-  status: "status",
-  due_date: "dueDate",
-  priority: "priority",
-  created_at: "createdAt",
-  modified_at: "modifiedAt",
-} as const;
+export type FileErrorCode =
+  | "FILE_NOT_FOUND"
+  | "FILE_READ_ERROR"
+  | "FILE_WRITE_ERROR"
+  | "FILE_LOCK_TIMEOUT"
+  | "FILE_LOCK_ERROR"
+  | "PARSE_ERROR"
+  | "INVALID_FORMAT";
 
 /**
- * Database table name
+ * Default file paths
  */
-export const TABLE_NAME = "todos" as const;
-
-/**
- * Index names for query optimization
- */
-export const INDEX_NAMES = {
-  status: "idx_status",
-  priority: "idx_priority",
-  dueDate: "idx_due_date",
-  createdAt: "idx_created_at",
-} as const;
+export const DEFAULT_FILE_PATH = "./data/todos.json" as const;
+export const DEFAULT_BACKUP_PATH = "./data/backups" as const;
 
 // ============================================================================
 // Constants

@@ -132,69 +132,43 @@ export type BulkDeleteRequest = z.infer<typeof BulkDeleteRequestSchema>;
 // ============================================================================
 
 /**
- * Status Filter
+ * Filter format: fieldname=comparator:value
+ * Only one filter per field is allowed
  */
-export const StatusFilterSchema = z.object({
-  equals: CalculatedStatusSchema.optional(),
-  notEquals: CalculatedStatusSchema.optional(),
-});
-
-export type StatusFilter = z.infer<typeof StatusFilterSchema>;
 
 /**
- * Priority Filter
+ * Status Filter Comparators
  */
-export const PriorityFilterSchema = z.object({
-  equals: PrioritySchema.optional(),
-  notEquals: PrioritySchema.optional(),
-});
-
-export type PriorityFilter = z.infer<typeof PriorityFilterSchema>;
+export const StatusFilterComparator = z.enum(["equals", "notEquals"]);
+export type StatusFilterComparator = z.infer<typeof StatusFilterComparator>;
 
 /**
- * Due Date Filter
+ * Priority Filter Comparators
  */
-export const DueDateFilterSchema = z.object({
-  before: DateStringSchema.optional(),
-  after: DateStringSchema.optional(),
-  notBefore: DateStringSchema.optional(),
-  notAfter: DateStringSchema.optional(),
-});
-
-export type DueDateFilter = z.infer<typeof DueDateFilterSchema>;
+export const PriorityFilterComparator = z.enum(["equals", "notEquals"]);
+export type PriorityFilterComparator = z.infer<typeof PriorityFilterComparator>;
 
 /**
- * Title Filter
+ * Due Date Filter Comparators
  */
-export const TitleFilterSchema = z.object({
-  contains: z.string().optional(),
-  notContains: z.string().optional(),
-});
-
-export type TitleFilter = z.infer<typeof TitleFilterSchema>;
+export const DueDateFilterComparator = z.enum(["before", "after", "notBefore", "notAfter"]);
+export type DueDateFilterComparator = z.infer<typeof DueDateFilterComparator>;
 
 /**
- * Description Filter
+ * String Filter Comparators (for title and description)
  */
-export const DescriptionFilterSchema = z.object({
-  contains: z.string().optional(),
-  notContains: z.string().optional(),
-});
-
-export type DescriptionFilter = z.infer<typeof DescriptionFilterSchema>;
+export const StringFilterComparator = z.enum(["contains", "notContains"]);
+export type StringFilterComparator = z.infer<typeof StringFilterComparator>;
 
 /**
- * Complete Filter Model for List Todos
+ * Parsed Filter (internal representation)
  */
-export const TodoFiltersSchema = z.object({
-  status: StatusFilterSchema.optional(),
-  priority: PriorityFilterSchema.optional(),
-  dueDate: DueDateFilterSchema.optional(),
-  title: TitleFilterSchema.optional(),
-  description: DescriptionFilterSchema.optional(),
-});
-
-export type TodoFilters = z.infer<typeof TodoFiltersSchema>;
+export type ParsedFilter =
+  | { field: "status"; comparator: StatusFilterComparator; value: CalculatedStatus }
+  | { field: "priority"; comparator: PriorityFilterComparator; value: Priority }
+  | { field: "dueDate"; comparator: DueDateFilterComparator; value: string }
+  | { field: "title"; comparator: StringFilterComparator; value: string }
+  | { field: "description"; comparator: StringFilterComparator; value: string };
 
 // ============================================================================
 // Response Models
@@ -253,25 +227,34 @@ export type TodoListResponse = SuccessResponse<Todo[]>;
 
 /**
  * List Todos Query Parameters
- * Note: In actual REST implementation, these would be flattened in query string
- * Example: ?status.equals=initial&priority.notEquals=low
+ * Format: fieldname=comparator:value
+ * Example: ?status=equals:initial&priority=notEquals:low&title=contains:meeting
+ * 
+ * Note: Only one filter per field is allowed
  */
 export const ListTodosQuerySchema = z.object({
-  "status.equals": CalculatedStatusSchema.optional(),
-  "status.notEquals": CalculatedStatusSchema.optional(),
-  "priority.equals": PrioritySchema.optional(),
-  "priority.notEquals": PrioritySchema.optional(),
-  "dueDate.before": DateStringSchema.optional(),
-  "dueDate.after": DateStringSchema.optional(),
-  "dueDate.notBefore": DateStringSchema.optional(),
-  "dueDate.notAfter": DateStringSchema.optional(),
-  "title.contains": z.string().optional(),
-  "title.notContains": z.string().optional(),
-  "description.contains": z.string().optional(),
-  "description.notContains": z.string().optional(),
+  status: z.string().regex(/^(equals|notEquals):(initial|complete|due)$/).optional(),
+  priority: z.string().regex(/^(equals|notEquals):(low|medium|high|urgent)$/).optional(),
+  dueDate: z.string().regex(/^(before|after|notBefore|notAfter):\d{4}-\d{2}-\d{2}$/).optional(),
+  title: z.string().regex(/^(contains|notContains):.+$/).optional(),
+  description: z.string().regex(/^(contains|notContains):.+$/).optional(),
 });
 
 export type ListTodosQuery = z.infer<typeof ListTodosQuerySchema>;
+
+/**
+ * Helper function to parse filter query parameter
+ */
+export const parseFilterParam = (param: string): { comparator: string; value: string } => {
+  const colonIndex = param.indexOf(":");
+  if (colonIndex === -1) {
+    throw new Error("Invalid filter format. Expected 'comparator:value'");
+  }
+  return {
+    comparator: param.substring(0, colonIndex),
+    value: param.substring(colonIndex + 1),
+  };
+};
 
 // ============================================================================
 // Path Parameter Models
@@ -292,6 +275,8 @@ export const ErrorCodes = {
   NOT_FOUND: "NOT_FOUND",
   INVALID_STATUS_TRANSITION: "INVALID_STATUS_TRANSITION",
   BULK_OPERATION_FAILED: "BULK_OPERATION_FAILED",
+  CONFLICT: "CONFLICT",
+  FILE_LOCK_TIMEOUT: "FILE_LOCK_TIMEOUT",
   INTERNAL_ERROR: "INTERNAL_ERROR",
 } as const;
 

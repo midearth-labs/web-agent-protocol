@@ -19,7 +19,7 @@ This document describes the high-level architecture, API design, and database sc
 ```mermaid
 graph LR
     Client[Client Application] -->|REST API| Backend[Todo Backend Service]
-    Backend -->|Read/Write| DB[(Database)]
+    Backend -->|Read/Write| FS[(JSON File Storage)]
     Backend -->|System Clock| Time[System Time Service]
 ```
 
@@ -37,7 +37,7 @@ graph TB
     end
     
     Client[Client App] -->|HTTP/HTTPS| API
-    DL -->|SQL| DB[(Database)]
+    DL -->|File I/O| FS[(JSON File Storage)]
     BL -->|Current Date| Time[System Time]
 ```
 
@@ -46,18 +46,20 @@ graph TB
 | Component | Responsibility |
 |-----------|---------------|
 | **REST API Layer** | Request validation, routing, response formatting, error handling |
-| **Business Logic Layer** | Business rules, status calculation, filtering logic, bulk operations coordination |
-| **Data Access Layer** | CRUD operations, query building, transaction management |
-| **Database** | Persistent storage of todo entities |
-| **System Time** | Provides current date for overdue calculation |
+| **Business Logic Layer** | Business rules, status calculation, filtering logic, bulk operations coordination, conflict detection |
+| **Data Access Layer** | CRUD operations, JSON file operations, atomic file updates, locking |
+| **JSON File Storage** | Persistent storage of todo entities as key-value pairs (UUID → Todo) |
+| **System Time** | Provides current date (UTC) for overdue calculation |
 
 ### 2.4 Key Design Decisions
 
-1. **Stateless Service**: Backend is stateless; all state stored in database
+1. **Stateless Service**: Backend is stateless; all state stored in JSON file
 2. **Calculated Status**: Status "due" is computed on-read, never stored
-3. **Atomic Bulk Operations**: Use database transactions for all-or-nothing semantics
-4. **Last-Write-Wins**: No optimistic locking; concurrent updates resolved by timestamp
+3. **Atomic Bulk Operations**: Use file locking and validation-first approach for all-or-nothing semantics
+4. **Conflict Detection**: Bulk operations fail with conflict error if any todo is being modified concurrently
 5. **Single Tenant**: No user context; all todos belong to implicit single user
+6. **File-Based Storage**: Single JSON file with UUID keys for simplicity and single-user optimization
+7. **UTC Timezone**: All date calculations use UTC for consistency
 
 ---
 
@@ -128,18 +130,18 @@ GET /api/v1/todos
 ```
 
 **Query Parameters** (all optional):
-- `status.equals`: enum ["initial", "complete", "due"]
-- `status.notEquals`: enum ["initial", "complete", "due"]
-- `priority.equals`: enum ["low", "medium", "high", "urgent"]
-- `priority.notEquals`: enum ["low", "medium", "high", "urgent"]
-- `dueDate.before`: string, YYYY-MM-DD
-- `dueDate.after`: string, YYYY-MM-DD
-- `dueDate.notBefore`: string, YYYY-MM-DD
-- `dueDate.notAfter`: string, YYYY-MM-DD
-- `title.contains`: string, case-insensitive
-- `title.notContains`: string, case-insensitive
-- `description.contains`: string, case-insensitive
-- `description.notContains`: string, case-insensitive
+Filter format: `fieldname=comparator:value`
+
+- `status=equals:initial|complete|due` or `status=notEquals:initial|complete|due`
+- `priority=equals:low|medium|high|urgent` or `priority=notEquals:low|medium|high|urgent`
+- `dueDate=before:YYYY-MM-DD` or `dueDate=after:YYYY-MM-DD` or `dueDate=notBefore:YYYY-MM-DD` or `dueDate=notAfter:YYYY-MM-DD`
+- `title=contains:text` or `title=notContains:text` (case-insensitive)
+- `description=contains:text` or `description=notContains:text` (case-insensitive)
+
+**Filter Rules**:
+- Only one filter per field is allowed
+- Multiple different fields can be combined with AND logic
+- Example: `?status=equals:initial&priority=notEquals:low&title=contains:meeting`
 
 **Filter Logic**: AND combination of all provided filters
 
@@ -260,60 +262,94 @@ POST /api/v1/todos/bulk-delete
 | 204 | No Content | Successful DELETE |
 | 400 | Bad Request | Validation error or business rule violation |
 | 404 | Not Found | Todo not found |
+| 409 | Conflict | Concurrent modification or file lock timeout |
 | 500 | Internal Server Error | Unexpected server error |
 
 ---
 
 ## 4. Data Design
 
-### 4.1 Database Schema
+### 4.1 JSON File Storage Schema
 
 ```mermaid
 erDiagram
-    TODOS {
-        uuid id PK "Primary Key"
-        varchar(100) title "Required"
-        varchar(1000) description "Nullable"
-        varchar(20) status "initial or complete"
-        date due_date "Nullable"
-        varchar(20) priority "low, medium, high, urgent"
-        timestamp created_at "Not null"
-        timestamp modified_at "Not null"
+    JSON_FILE {
+        string filename "todos.json"
+        object structure "Key-Value Store"
     }
+    TODO_ENTITY {
+        uuid id "Key"
+        string title "Max 100 chars"
+        string description "Max 1000 chars, nullable"
+        string status "initial or complete"
+        string dueDate "YYYY-MM-DD, nullable"
+        string priority "low, medium, high, urgent"
+        string createdAt "ISO 8601 timestamp"
+        string modifiedAt "ISO 8601 timestamp"
+    }
+    JSON_FILE ||--o{ TODO_ENTITY : contains
 ```
 
-### 4.2 Table: `todos`
+### 4.2 File Structure
 
-| Column | Type | Constraints | Description |
-|--------|------|-------------|-------------|
-| `id` | UUID | PRIMARY KEY, NOT NULL | System-generated unique identifier |
-| `title` | VARCHAR(100) | NOT NULL | Todo title |
-| `description` | VARCHAR(1000) | NULL | Optional detailed description |
-| `status` | VARCHAR(20) | NOT NULL | Stored status: "initial" or "complete" |
-| `due_date` | DATE | NULL | Optional deadline (date only) |
-| `priority` | VARCHAR(20) | NOT NULL, DEFAULT 'medium' | Priority level |
-| `created_at` | TIMESTAMP | NOT NULL | Creation timestamp (UTC) |
-| `modified_at` | TIMESTAMP | NOT NULL | Last modification timestamp (UTC) |
+**File Name**: `todos.json`
 
-### 4.3 Indexes
-
-```sql
--- Primary key (automatically indexed)
-PRIMARY KEY (id)
-
--- Query optimization for filtering
-CREATE INDEX idx_status ON todos(status);
-CREATE INDEX idx_priority ON todos(priority);
-CREATE INDEX idx_due_date ON todos(due_date);
-CREATE INDEX idx_created_at ON todos(created_at);
+**Structure**: Key-Value Store
+```json
+{
+  "uuid-1": {
+    "id": "uuid-1",
+    "title": "Example Todo",
+    "description": "Description text",
+    "status": "initial",
+    "dueDate": "2025-12-31",
+    "priority": "medium",
+    "createdAt": "2025-11-10T10:00:00.000Z",
+    "modifiedAt": "2025-11-10T10:00:00.000Z"
+  },
+  "uuid-2": { ... }
+}
 ```
 
-### 4.4 Constraints
+### 4.3 Storage Specifications
 
-- No uniqueness constraints on any field except primary key
-- No foreign keys (single entity system)
-- Check constraint: `status IN ('initial', 'complete')`
-- Check constraint: `priority IN ('low', 'medium', 'high', 'urgent')`
+| Aspect | Specification |
+|--------|--------------|
+| **File Format** | JSON (UTF-8 encoded) |
+| **Structure** | Single-level object with UUID keys |
+| **Key** | UUID v4 string |
+| **Value** | Todo entity object |
+| **File Location** | Configurable (default: `./data/todos.json`) |
+| **File Size** | Expected < 1MB for typical usage (< 10,000 todos) |
+| **Encoding** | UTF-8 |
+| **Pretty Print** | Configurable (recommended: disabled for production) |
+
+### 4.4 Data Validation
+
+**Field Constraints** (enforced at application layer):
+- `id`: Must be valid UUID v4
+- `title`: Required, 1-100 characters, non-whitespace
+- `description`: Optional, max 1000 characters or null
+- `status`: Must be "initial" or "complete"
+- `dueDate`: Optional, YYYY-MM-DD format or null
+- `priority`: Must be "low", "medium", "high", or "urgent"
+- `createdAt`: ISO 8601 timestamp with millisecond precision
+- `modifiedAt`: ISO 8601 timestamp with millisecond precision
+
+### 4.5 File Operations
+
+**Atomic Updates**:
+1. Read entire file into memory
+2. Parse JSON
+3. Apply modifications
+4. Validate changes
+5. Write to temporary file
+6. Atomic rename/replace original file
+
+**Concurrency Control**:
+- File-level locking during read-modify-write operations
+- Lock timeout: 5 seconds
+- Retry mechanism for lock conflicts
 
 ---
 
@@ -395,27 +431,47 @@ sequenceDiagram
     participant Client
     participant API
     participant BusinessLogic
-    participant Database
+    participant FileStorage
     
     Client->>API: Bulk Operation Request
     API->>BusinessLogic: Validate Request
-    BusinessLogic->>Database: BEGIN TRANSACTION
+    BusinessLogic->>FileStorage: Acquire File Lock
     
-    loop For Each Todo
-        BusinessLogic->>Database: Validate & Execute
-        alt Validation Fails
-            Database->>BusinessLogic: Error
-            BusinessLogic->>Database: ROLLBACK
-            BusinessLogic->>API: Error Response
-            API->>Client: 400 Error
+    alt Lock Acquired
+        FileStorage->>BusinessLogic: Lock Success
+        BusinessLogic->>FileStorage: Read All Todos
+        FileStorage->>BusinessLogic: Todo Data
+        
+        loop For Each Todo ID
+            BusinessLogic->>BusinessLogic: Validate & Check
+            alt Validation Fails
+                BusinessLogic->>FileStorage: Release Lock
+                BusinessLogic->>API: Error Response (All Errors)
+                API->>Client: 400/409 Error
+            end
         end
+        
+        BusinessLogic->>BusinessLogic: Apply All Changes
+        BusinessLogic->>FileStorage: Write Updated Data
+        FileStorage->>BusinessLogic: Success
+        BusinessLogic->>FileStorage: Release Lock
+        BusinessLogic->>API: Success Response
+        API->>Client: 200/204 Success
+    else Lock Failed
+        FileStorage->>BusinessLogic: Lock Timeout
+        BusinessLogic->>API: Conflict Error
+        API->>Client: 409 Conflict
     end
-    
-    BusinessLogic->>Database: COMMIT
-    Database->>BusinessLogic: Success
-    BusinessLogic->>API: Success Response
-    API->>Client: 200/204 Success
 ```
+
+**Validation-First Approach**:
+1. Acquire exclusive file lock
+2. Read entire file
+3. Validate ALL items before making any changes
+4. If any validation fails, release lock and return all errors
+5. If all validations pass, apply changes in memory
+6. Write updated data atomically
+7. Release lock
 
 ---
 
@@ -428,16 +484,22 @@ sequenceDiagram
     participant Client
     participant API
     participant BusinessLogic
-    participant Database
+    participant FileStorage
     
     Client->>API: POST /todos (title, description, etc.)
     API->>API: Validate Request
     API->>BusinessLogic: Create Todo
-    BusinessLogic->>BusinessLogic: Generate UUID
+    BusinessLogic->>BusinessLogic: Generate UUID v4
     BusinessLogic->>BusinessLogic: Set Defaults (priority, status)
-    BusinessLogic->>BusinessLogic: Set Timestamps
-    BusinessLogic->>Database: INSERT
-    Database->>BusinessLogic: Success
+    BusinessLogic->>BusinessLogic: Set Timestamps (UTC)
+    BusinessLogic->>FileStorage: Acquire Lock
+    FileStorage->>BusinessLogic: Lock Acquired
+    BusinessLogic->>FileStorage: Read File
+    FileStorage->>BusinessLogic: Existing Todos
+    BusinessLogic->>BusinessLogic: Add New Todo
+    BusinessLogic->>FileStorage: Write Updated File
+    FileStorage->>BusinessLogic: Success
+    BusinessLogic->>FileStorage: Release Lock
     BusinessLogic->>API: Todo Entity
     API->>Client: 201 Created
 ```
@@ -449,17 +511,17 @@ sequenceDiagram
     participant Client
     participant API
     participant BusinessLogic
-    participant Database
+    participant FileStorage
     
     Client->>API: GET /todos?filters
     API->>API: Parse & Validate Filters
     API->>BusinessLogic: List Todos (filters)
-    BusinessLogic->>Database: SELECT with WHERE clauses
-    Database->>BusinessLogic: Raw Todo Records
+    BusinessLogic->>FileStorage: Read File
+    FileStorage->>BusinessLogic: All Todo Records
     
     loop For Each Todo
-        BusinessLogic->>BusinessLogic: Calculate Status
-        BusinessLogic->>BusinessLogic: Apply Status Filter (if any)
+        BusinessLogic->>BusinessLogic: Calculate Status (UTC)
+        BusinessLogic->>BusinessLogic: Apply All Filters
     end
     
     BusinessLogic->>API: Filtered Todo List
@@ -508,21 +570,23 @@ sequenceDiagram
 
 | Component | Recommendation |
 |-----------|---------------|
-| **Database** | PostgreSQL (UUID support, ACID compliance, JSON support for future) |
-| **Alternative DB** | SQLite (simpler deployment), MySQL (wider adoption) |
+| **Storage** | JSON File (single-user optimized) |
+| **File Locking** | `proper-lockfile` (Node.js), `filelock` (Python), `java.nio.file.FileLock` (Java) |
 | **API Framework** | Express.js (Node.js), FastAPI (Python), Spring Boot (Java) |
 | **Validation** | Zod (TypeScript), Joi (JavaScript), Pydantic (Python) |
-| **ORM** | Drizzle ORM, Prisma, TypeORM (TypeScript), SQLAlchemy (Python) |
+| **UUID Generation** | `uuid` library (Node.js/Python), `java.util.UUID` (Java) |
+| **File I/O** | `fs.promises` (Node.js), `pathlib` (Python), `java.nio.file` (Java) |
 
-### 8.2 Database Choice Comparison
+### 8.2 JSON File Storage Considerations
 
-| Feature | PostgreSQL | SQLite | MySQL |
-|---------|-----------|--------|-------|
-| **UUID Support** | Native | Extension | Native (8.0+) |
-| **ACID Compliance** | Full | Full | Full |
-| **Concurrency** | Excellent | Good (write-lock) | Excellent |
-| **Deployment** | Server | File-based | Server |
-| **Recommendation** | Best for production | Best for development | Alternative |
+| Aspect | Consideration | Mitigation |
+|--------|--------------|------------|
+| **Performance** | Full file read/write on every operation | Acceptable for < 10K todos; future: in-memory cache |
+| **Concurrency** | File locking can be bottleneck | Lock timeout with retry; future: database migration |
+| **Data Corruption** | Power loss during write | Atomic write via temp file + rename |
+| **Backup** | Manual file copy | Simple file-based backup strategy |
+| **Scalability** | Limited to single process | Sufficient for single-user; future: database for multi-user |
+| **Filtering** | In-memory filtering (no indexing) | Fast enough for small datasets |
 
 ---
 
@@ -533,13 +597,18 @@ graph TB
     subgraph "Production Environment"
         LB[Load Balancer/Reverse Proxy]
         APP[Backend Service]
-        DB[(Database)]
+        FS[(JSON File Storage)]
         
         LB -->|HTTPS| APP
-        APP -->|TCP| DB
+        APP -->|File I/O| FS
     end
     
     Client[Client Application] -->|HTTPS| LB
+    
+    subgraph "Storage Volume"
+        FS
+        Backup[Backup Files]
+    end
 ```
 
 ### 9.1 Deployment Components
@@ -547,8 +616,17 @@ graph TB
 | Component | Purpose | Scaling |
 |-----------|---------|---------|
 | **Load Balancer** | SSL termination, request routing | N/A (single user) |
-| **Backend Service** | API processing | Single instance (stateless) |
-| **Database** | Persistent storage | Single instance |
+| **Backend Service** | API processing | Single instance (file-locked) |
+| **JSON File Storage** | Persistent storage | Persistent volume mount |
+| **Storage Volume** | Data persistence | Backed up regularly |
+
+### 9.2 Deployment Considerations
+
+- **Single Instance**: Only one backend instance due to file locking
+- **Persistent Volume**: JSON file must be on persistent storage
+- **Backup Strategy**: Regular file snapshots/copies
+- **Recovery**: Restore from backup file
+- **Zero-Downtime**: Not possible with file locking (brief downtime acceptable for single-user)
 
 ---
 
