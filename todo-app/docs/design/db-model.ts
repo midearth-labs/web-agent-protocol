@@ -238,15 +238,14 @@ export type PaginatedResult<T> = {
 // ============================================================================
 
 /**
- * Configuration for JSON file storage
+ * Configuration for in-memory cache with file persistence
  */
-export type FileStorageConfig = {
-  filePath: string;
-  lockTimeout?: number; // milliseconds, default 5000
-  lockRetries?: number; // number of retry attempts, default 3
+export type CacheConfig = {
+  filePath: string; // JSON file path for persistence
+  lockRetries?: number; // number of retry attempts, default 5
+  retryBackoff?: number[]; // backoff intervals in ms, default [50, 100, 200, 400, 800]
   prettyPrint?: boolean; // format JSON with indentation, default false
-  backupEnabled?: boolean; // create backup files, default false
-  backupPath?: string; // backup file location
+  validateOnStartup?: boolean; // validate file on load, default false (MVP)
 };
 
 // ============================================================================
@@ -259,6 +258,20 @@ export type FileStorageConfig = {
  * Value: TodoEntity
  */
 export type TodosFileContent = Record<string, TodoEntity>;
+
+/**
+ * In-memory cache structure (same as file format)
+ */
+export type TodosCache = Record<string, TodoEntity>;
+
+/**
+ * Cache lock state
+ */
+export type CacheLock = {
+  locked: boolean;
+  acquiredAt?: Date;
+  operationId?: string;
+};
 
 /**
  * File operation result

@@ -30,15 +30,20 @@ graph TB
     subgraph "Todo Backend Service"
         API[REST API Layer]
         BL[Business Logic Layer]
+        Cache[In-Memory Cache]
         DL[Data Access Layer]
         
         API --> BL
-        BL --> DL
+        BL --> Cache
+        Cache --> DL
     end
     
     Client[Client App] -->|HTTP/HTTPS| API
-    DL -->|File I/O| FS[(JSON File Storage)]
+    DL -->|File Sync| FS[(JSON File Storage)]
     BL -->|Current Date| Time[System Time]
+    
+    note1[On Startup: Load File → Cache]
+    note2[On Write: Update Cache → Sync File]
 ```
 
 ### 2.3 Component Responsibilities
@@ -47,19 +52,23 @@ graph TB
 |-----------|---------------|
 | **REST API Layer** | Request validation, routing, response formatting, error handling |
 | **Business Logic Layer** | Business rules, status calculation, filtering logic, bulk operations coordination, conflict detection |
-| **Data Access Layer** | CRUD operations, JSON file operations, atomic file updates, locking |
-| **JSON File Storage** | Persistent storage of todo entities as key-value pairs (UUID → Todo) |
+| **In-Memory Cache** | Primary data store, loaded at startup, all reads/writes go through cache |
+| **Data Access Layer** | File synchronization, atomic file updates, simple global lock flag |
+| **JSON File Storage** | Persistent backup of in-memory cache (UUID → Todo key-value pairs) |
 | **System Time** | Provides current date (UTC) for overdue calculation |
 
 ### 2.4 Key Design Decisions
 
-1. **Stateless Service**: Backend is stateless; all state stored in JSON file
-2. **Calculated Status**: Status "due" is computed on-read, never stored
-3. **Atomic Bulk Operations**: Use file locking and validation-first approach for all-or-nothing semantics
-4. **Conflict Detection**: Bulk operations fail with conflict error if any todo is being modified concurrently
-5. **Single Tenant**: No user context; all todos belong to implicit single user
-6. **File-Based Storage**: Single JSON file with UUID keys for simplicity and single-user optimization
-7. **UTC Timezone**: All date calculations use UTC for consistency
+1. **In-Memory Cache**: Primary data store loaded at startup from JSON file; all operations use cache
+2. **File Synchronization**: Cache changes synced to file after each write operation
+3. **Calculated Status**: Status "due" is computed on-read, never stored
+4. **Simple Locking**: Global boolean flag for operation serialization (MVP simplicity)
+5. **Atomic Operations**: Mutate on copy of cache, commit both cache and file atomically
+6. **Validation-First**: Validate all bulk operation items before applying any changes
+7. **Retry with Backoff**: Auto-retry on lock conflicts with exponential backoff
+8. **Single Tenant**: No user context; all todos belong to implicit single user
+9. **UTC Timezone**: All date calculations use UTC for consistency
+10. **MVP Focus**: Minimal file handling, manual initialization, system default permissions
 
 ---
 
@@ -336,20 +345,43 @@ erDiagram
 - `createdAt`: ISO 8601 timestamp with millisecond precision
 - `modifiedAt`: ISO 8601 timestamp with millisecond precision
 
-### 4.5 File Operations
+### 4.5 Cache and File Operations
 
-**Atomic Updates**:
-1. Read entire file into memory
-2. Parse JSON
-3. Apply modifications
-4. Validate changes
-5. Write to temporary file
-6. Atomic rename/replace original file
+**Startup Sequence**:
+1. Check if JSON file exists (fail if missing - manual initialization required)
+2. Read and parse JSON file
+3. Validate file structure and data integrity
+4. Load into in-memory cache (Record<UUID, TodoEntity>)
+5. Application ready to serve requests
+
+**Read Operations**:
+1. All reads served directly from in-memory cache
+2. No file I/O on reads
+3. Status calculated on-demand from cache data
+
+**Write Operations** (Copy-on-Write Pattern):
+1. Acquire global lock (simple boolean flag)
+2. Create copy of in-memory cache
+3. Apply modifications to copy
+4. Validate all changes
+5. If valid: commit copy to cache, sync to file
+6. If invalid: discard copy, release lock, return error
+7. Release global lock
+
+**File Synchronization**:
+- Write entire cache to file after each mutation
+- In-memory write (no temp file)
+- File permissions: system defaults
+- Encoding: UTF-8
+- Format: ISO 8601 timestamps with millisecond precision
+- Null fields: stored as explicit `null`
 
 **Concurrency Control**:
-- File-level locking during read-modify-write operations
-- Lock timeout: 5 seconds
-- Retry mechanism for lock conflicts
+- Simple global boolean lock flag (not file-system level)
+- Lock on all operations (read and write)
+- Retry with exponential backoff on lock conflicts
+- Backoff: 50ms, 100ms, 200ms, 400ms, 800ms
+- Max retries: 5
 
 ---
 
@@ -431,47 +463,52 @@ sequenceDiagram
     participant Client
     participant API
     participant BusinessLogic
+    participant Cache
     participant FileStorage
     
     Client->>API: Bulk Operation Request
     API->>BusinessLogic: Validate Request
-    BusinessLogic->>FileStorage: Acquire File Lock
+    BusinessLogic->>Cache: Acquire Lock (with retry)
     
     alt Lock Acquired
-        FileStorage->>BusinessLogic: Lock Success
-        BusinessLogic->>FileStorage: Read All Todos
-        FileStorage->>BusinessLogic: Todo Data
+        Cache->>BusinessLogic: Lock Success
+        BusinessLogic->>Cache: Read All Todos
+        Cache->>BusinessLogic: In-Memory Data
+        BusinessLogic->>BusinessLogic: Create Copy of Cache
         
         loop For Each Todo ID
-            BusinessLogic->>BusinessLogic: Validate & Check
+            BusinessLogic->>BusinessLogic: Validate & Check on Copy
             alt Validation Fails
-                BusinessLogic->>FileStorage: Release Lock
+                BusinessLogic->>BusinessLogic: Discard Copy
+                BusinessLogic->>Cache: Release Lock
                 BusinessLogic->>API: Error Response (All Errors)
-                API->>Client: 400/409 Error
+                API->>Client: 400 Error
             end
         end
         
-        BusinessLogic->>BusinessLogic: Apply All Changes
-        BusinessLogic->>FileStorage: Write Updated Data
+        BusinessLogic->>BusinessLogic: Apply All Changes to Copy
+        BusinessLogic->>Cache: Commit Copy to Cache
+        BusinessLogic->>FileStorage: Sync Cache to File
         FileStorage->>BusinessLogic: Success
-        BusinessLogic->>FileStorage: Release Lock
+        BusinessLogic->>Cache: Release Lock
         BusinessLogic->>API: Success Response
         API->>Client: 200/204 Success
-    else Lock Failed
-        FileStorage->>BusinessLogic: Lock Timeout
+    else Lock Failed (after retries)
+        Cache->>BusinessLogic: Lock Timeout
         BusinessLogic->>API: Conflict Error
         API->>Client: 409 Conflict
     end
 ```
 
 **Validation-First Approach**:
-1. Acquire exclusive file lock
-2. Read entire file
-3. Validate ALL items before making any changes
-4. If any validation fails, release lock and return all errors
-5. If all validations pass, apply changes in memory
-6. Write updated data atomically
-7. Release lock
+1. Acquire global lock (with exponential backoff retry)
+2. Create copy of in-memory cache
+3. Validate ALL items on the copy before making any changes
+4. If any validation fails, discard copy, release lock, return all errors
+5. If all validations pass, apply changes to copy
+6. Commit copy to main cache
+7. Sync cache to file
+8. Release lock
 
 ---
 
@@ -484,6 +521,7 @@ sequenceDiagram
     participant Client
     participant API
     participant BusinessLogic
+    participant Cache
     participant FileStorage
     
     Client->>API: POST /todos (title, description, etc.)
@@ -492,14 +530,14 @@ sequenceDiagram
     BusinessLogic->>BusinessLogic: Generate UUID v4
     BusinessLogic->>BusinessLogic: Set Defaults (priority, status)
     BusinessLogic->>BusinessLogic: Set Timestamps (UTC)
-    BusinessLogic->>FileStorage: Acquire Lock
-    FileStorage->>BusinessLogic: Lock Acquired
-    BusinessLogic->>FileStorage: Read File
-    FileStorage->>BusinessLogic: Existing Todos
-    BusinessLogic->>BusinessLogic: Add New Todo
-    BusinessLogic->>FileStorage: Write Updated File
+    BusinessLogic->>Cache: Acquire Lock (with retry)
+    Cache->>BusinessLogic: Lock Acquired
+    BusinessLogic->>Cache: Create Copy
+    BusinessLogic->>BusinessLogic: Add New Todo to Copy
+    BusinessLogic->>Cache: Commit Copy
+    BusinessLogic->>FileStorage: Sync to File
     FileStorage->>BusinessLogic: Success
-    BusinessLogic->>FileStorage: Release Lock
+    BusinessLogic->>Cache: Release Lock
     BusinessLogic->>API: Todo Entity
     API->>Client: 201 Created
 ```
@@ -511,13 +549,16 @@ sequenceDiagram
     participant Client
     participant API
     participant BusinessLogic
-    participant FileStorage
+    participant Cache
     
     Client->>API: GET /todos?filters
     API->>API: Parse & Validate Filters
     API->>BusinessLogic: List Todos (filters)
-    BusinessLogic->>FileStorage: Read File
-    FileStorage->>BusinessLogic: All Todo Records
+    BusinessLogic->>Cache: Acquire Lock (with retry)
+    Cache->>BusinessLogic: Lock Acquired
+    BusinessLogic->>Cache: Read All Todos
+    Cache->>BusinessLogic: In-Memory Data
+    BusinessLogic->>Cache: Release Lock
     
     loop For Each Todo
         BusinessLogic->>BusinessLogic: Calculate Status (UTC)
@@ -534,59 +575,67 @@ sequenceDiagram
 
 ### 7.1 Performance Targets
 
-| Operation | Target Response Time |
-|-----------|---------------------|
-| Create Todo | < 100ms |
-| Get Todo by ID | < 50ms |
-| List/Filter Todos | < 200ms |
-| Update Todo | < 100ms |
-| Delete Todo | < 50ms |
-| Bulk Operations | < 500ms (for 100 items) |
+| Operation | Target Response Time | Notes |
+|-----------|---------------------|-------|
+| Create Todo | < 100ms | Includes file sync |
+| Get Todo by ID | < 10ms | Memory-only (no I/O) |
+| List/Filter Todos | < 50ms | Memory-only (no I/O) |
+| Update Todo | < 100ms | Includes file sync |
+| Delete Todo | < 100ms | Includes file sync |
+| Bulk Operations | < 500ms (for 100 items) | Includes file sync |
+| Startup | < 2s | File load and validation |
 
 ### 7.2 Scalability
 
-- **Current**: Single-user system, optimized for < 10,000 todos
-- **Database**: Standard relational database with indexed queries
-- **Concurrency**: Last-write-wins, no locking overhead
+- **Current**: Single-user system, in-memory optimized, unlimited todos (memory-constrained)
+- **Memory**: ~1KB per todo (estimate: 10,000 todos = ~10MB memory)
+- **Storage**: In-memory cache, no indexing needed
+- **Concurrency**: Simple global lock with retry, minimal overhead
+- **File I/O**: Only on write operations (not reads)
 
 ### 7.3 Reliability
 
-- **Atomicity**: Bulk operations use database transactions
-- **Data Integrity**: Database constraints enforce valid states
-- **Error Handling**: Graceful degradation with detailed error messages
+- **Atomicity**: Copy-on-write pattern ensures all-or-nothing updates
+- **Data Integrity**: Application-layer validation before committing to cache
+- **Error Handling**: Validation-first with detailed error messages
+- **Crash Recovery**: File persisted after each write; load on restart
+- **Data Loss Risk**: Uncommitted in-memory changes lost on crash (minimal window)
 
 ### 7.4 Security Considerations
 
-- **Current Scope**: No authentication/authorization (single-user)
+- **Current Scope**: No authentication/authorization (single-user MVP)
 - **Future**: Add authentication layer before API endpoints
 - **Data Validation**: Strict input validation on all endpoints
-- **Error Messages**: Field-specific errors (acceptable for single-user)
+- **Error Messages**: Field-specific errors (acceptable for single-user MVP)
+- **File Access**: System default permissions (MVP simplicity)
 
 ---
 
 ## 8. Technology Considerations
 
-### 8.1 Recommended Stack
+### 8.1 Recommended Stack (MVP)
 
 | Component | Recommendation |
 |-----------|---------------|
-| **Storage** | JSON File (single-user optimized) |
-| **File Locking** | `proper-lockfile` (Node.js), `filelock` (Python), `java.nio.file.FileLock` (Java) |
+| **Storage** | In-memory cache + JSON file persistence |
+| **Locking** | Simple global boolean flag (no external library) |
 | **API Framework** | Express.js (Node.js), FastAPI (Python), Spring Boot (Java) |
 | **Validation** | Zod (TypeScript), Joi (JavaScript), Pydantic (Python) |
 | **UUID Generation** | `uuid` library (Node.js/Python), `java.util.UUID` (Java) |
 | **File I/O** | `fs.promises` (Node.js), `pathlib` (Python), `java.nio.file` (Java) |
 
-### 8.2 JSON File Storage Considerations
+### 8.2 In-Memory Cache with File Persistence
 
-| Aspect | Consideration | Mitigation |
-|--------|--------------|------------|
-| **Performance** | Full file read/write on every operation | Acceptable for < 10K todos; future: in-memory cache |
-| **Concurrency** | File locking can be bottleneck | Lock timeout with retry; future: database migration |
-| **Data Corruption** | Power loss during write | Atomic write via temp file + rename |
-| **Backup** | Manual file copy | Simple file-based backup strategy |
-| **Scalability** | Limited to single process | Sufficient for single-user; future: database for multi-user |
-| **Filtering** | In-memory filtering (no indexing) | Fast enough for small datasets |
+| Aspect | Approach | Notes |
+|--------|----------|-------|
+| **Primary Storage** | In-memory cache (Record/Map/Dictionary) | All operations use cache |
+| **Persistence** | JSON file sync after writes | File acts as backup |
+| **Performance** | O(1) lookups, O(n) filtering | Very fast for typical workloads |
+| **Concurrency** | Simple global lock flag | MVP simplicity over sophistication |
+| **Startup** | Load file into memory | Fail if file missing or corrupted |
+| **Memory Usage** | ~1KB per todo | 10K todos = ~10MB (acceptable) |
+| **Data Loss Risk** | Only uncommitted in-memory changes | Minimal window (writes sync immediately) |
+| **Scalability** | Memory-constrained | Suitable for MVP, not production scale |
 
 ---
 
@@ -620,13 +669,16 @@ graph TB
 | **JSON File Storage** | Persistent storage | Persistent volume mount |
 | **Storage Volume** | Data persistence | Backed up regularly |
 
-### 9.2 Deployment Considerations
+### 9.2 Deployment Considerations (MVP)
 
-- **Single Instance**: Only one backend instance due to file locking
+- **Single Instance**: Only one backend instance (in-memory cache constraint)
 - **Persistent Volume**: JSON file must be on persistent storage
-- **Backup Strategy**: Regular file snapshots/copies
-- **Recovery**: Restore from backup file
-- **Zero-Downtime**: Not possible with file locking (brief downtime acceptable for single-user)
+- **Initialization**: JSON file must exist before startup (manual creation required)
+- **Backup Strategy**: External file copy/snapshot (not in application)
+- **Recovery**: Restore file and restart application
+- **Zero-Downtime**: Not applicable for MVP
+- **Memory Requirements**: Allocate sufficient RAM for cache (10MB per 10K todos)
+- **Crash Recovery**: Load file on startup; uncommitted changes lost
 
 ---
 
@@ -665,15 +717,50 @@ graph TB
 
 ---
 
-## 11. Open Design Questions
+## 11. MVP Simplifications
 
-See `hld.clarification.md` for specific questions requiring product decisions.
+This design prioritizes MVP simplicity over production robustness. Key simplifications:
+
+### Accepted Trade-offs:
+1. **Simple Locking**: Global boolean flag instead of file-system locks or sophisticated locking library
+2. **Manual Initialization**: File must be created manually before first run (no auto-creation)
+3. **System Permissions**: Use OS defaults instead of explicit 600 permissions
+4. **No Size Limits**: Unlimited todos (constrained only by memory)
+5. **No Validation on Startup**: File loaded without integrity checks
+6. **No Backups**: External backup responsibility (not in application)
+7. **No File Versioning**: No history or rollback capability
+8. **No Repair Tools**: Manual recovery required for corruption
+9. **No Metrics**: No performance monitoring or statistics
+10. **In-Memory Write**: File written directly from memory (no temp file)
+
+### MVP Risks:
+- **Data Loss**: Crash during write loses uncommitted changes
+- **No Corruption Detection**: Invalid JSON causes startup failure
+- **Memory Constraints**: Large datasets may exhaust memory
+- **Concurrency**: Simple lock may be insufficient under load
+- **No Audit Trail**: No logging of file operations
+
+### Production Migration Path:
+When moving beyond MVP, consider:
+1. Add file integrity checks and validation
+2. Implement proper file locking library
+3. Add comprehensive error handling and recovery
+4. Implement backup and versioning
+5. Migrate to database for scalability
+6. Add monitoring and metrics
+7. Implement proper security (file permissions, encryption)
 
 ---
 
-## 12. Design Alternatives & Suggestions
+## 12. Open Design Questions
 
-See `hld.suggestions.md` for alternative approaches and optimization suggestions.
+All clarifications answered. See `hld.clarification.md` and `hld.clarification.new.md` for details.
+
+---
+
+## 13. Design Alternatives & Suggestions
+
+See `hld.suggestions.md` and `hld.suggestions.new.md` for alternative approaches (mostly rejected for MVP).
 
 ---
 
