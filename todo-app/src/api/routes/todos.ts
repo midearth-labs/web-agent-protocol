@@ -4,10 +4,10 @@
 
 import { Router } from "express";
 import type { Request, Response } from "express";
-import { CreateTodoRequestSchema, ListTodosQuerySchema, TodoIdParamSchema, UpdateTodoRequestSchema, BulkUpdateStatusRequestSchema, parseFilterParam } from "../../models/api-model.js";
+import { CreateTodoRequestSchema, ListTodosQuerySchema, TodoIdParamSchema, UpdateTodoRequestSchema, BulkUpdateStatusRequestSchema, BulkDeleteRequestSchema, parseFilterParam } from "../../models/api-model.js";
 import { validateBody, validateQuery, validateParams } from "../middleware/validator.js";
 import type { TodoService } from "../../business/todo-service.js";
-import type { CreateTodoRequest, ListTodosQuery, TodoIdParam, UpdateTodoRequest, BulkUpdateStatusRequest, TodoResponse, TodoListResponse } from "../../models/api-model.js";
+import type { CreateTodoRequest, ListTodosQuery, TodoIdParam, UpdateTodoRequest, BulkUpdateStatusRequest, BulkDeleteRequest, TodoResponse, TodoListResponse } from "../../models/api-model.js";
 
 /**
  * Parses filter query parameters into filter criteria format
@@ -230,6 +230,29 @@ export function createTodoRoutes(todoService: TodoService): Router {
 
       // Return response
       res.status(200).json({ data: dtos });
+    }
+  );
+
+  /**
+   * POST /api/v1/todos/bulk-delete
+   * Bulk delete multiple todos
+   */
+  router.post(
+    "/bulk-delete",
+    validateBody(BulkDeleteRequestSchema),
+    async (req: Request<unknown, unknown, BulkDeleteRequest>, res: Response) => {
+      const input = req.body;
+
+      // Convert API request to business input
+      const bulkDeleteInput = {
+        ids: input.ids,
+      };
+
+      // Bulk delete
+      await todoService.bulkDelete(bulkDeleteInput);
+
+      // Return 204 No Content
+      res.status(204).send();
     }
   );
 

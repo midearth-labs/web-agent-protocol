@@ -9,6 +9,7 @@ import type {
   CreateTodoInput,
   UpdateTodoInput,
   BulkUpdateStatusInput,
+  BulkDeleteInput,
   StoredStatus,
   TodosCache,
 } from "../models/db-model.js";
@@ -354,6 +355,38 @@ export class TodoService {
     }
 
     return updatedDTOs;
+  }
+
+  /**
+   * Bulk deletes multiple todos
+   * Uses validation-first approach: validates all before applying any changes
+   * All reads and writes happen within a single lock
+   * 
+   * @param input - Bulk delete input
+   * @throws Error if any validation fails (atomic rollback)
+   */
+  async bulkDelete(input: BulkDeleteInput): Promise<void> {
+    // Pre-condition check: validate all entities exist within lock before making any changes
+    const preConditionCheck = (cache: TodosCache): void => {
+      const errors: string[] = [];
+
+      for (const id of input.ids) {
+        const entity = cache[id];
+        if (!entity) {
+          errors.push(`Todo with id ${id} not found`);
+        }
+      }
+
+      // If any validation failed, throw error with all errors (atomic rollback)
+      if (errors.length > 0) {
+        throw new BulkOperationFailedError(`Bulk delete failed: ${errors.join("; ")}`);
+      }
+    };
+
+    // Bulk delete with pre-condition check (all deletions happen atomically within lock)
+    // Errors bubble up naturally - preConditionCheck errors become BulkOperationFailedError,
+    // ResourceNotFoundError stays as is, file errors become FileWriteError, etc.
+    await this.cache.bulkDelete(input.ids, preConditionCheck);
   }
 
   /**

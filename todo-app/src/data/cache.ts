@@ -285,6 +285,44 @@ export class CacheService {
   }
 
   /**
+   * Bulk deletes multiple todos
+   * All deletions happen atomically within a single lock
+   * @param ids - Array of todo IDs to delete
+   * @param preConditionCheck - Optional callback that validates the cache state before delete (runs within lock)
+   * @throws ResourceNotFoundError if any todo not found
+   * @throws FileLockTimeoutError if lock cannot be acquired
+   * @throws FileWriteError if file cannot be written
+   * @throws Any error thrown by preConditionCheck
+   */
+  async bulkDelete(
+    ids: string[],
+    preConditionCheck?: (cache: TodosCache) => void
+  ): Promise<void> {
+    await this.withLock(async () => {
+      // Run pre-condition check if provided (within lock, before any changes)
+      // If it throws, the error bubbles up and no changes are made
+      if (preConditionCheck) {
+        preConditionCheck(this.cache);
+      }
+
+      // Create copy of cache
+      const cacheCopy = this.createCacheCopy();
+
+      // Delete all entities
+      for (const id of ids) {
+        if (!cacheCopy[id]) {
+          throw new ResourceNotFoundError("Todo", id);
+        }
+
+        delete cacheCopy[id];
+      }
+
+      // Commit and sync
+      await this.commitCache(cacheCopy);
+    });
+  }
+
+  /**
    * Gets the current cache size
    */
   getSize(): number {
