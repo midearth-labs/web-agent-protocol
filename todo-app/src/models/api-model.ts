@@ -149,9 +149,9 @@ export const PriorityFilterComparator = z.enum(["equals", "notEquals"]);
 export type PriorityFilterComparator = z.infer<typeof PriorityFilterComparator>;
 
 /**
- * Due Date Filter Comparators
+ * Due Date Filter Comparators (for internal use only)
  */
-export const DueDateFilterComparator = z.enum(["before", "after", "notBefore", "notAfter"]);
+export const DueDateFilterComparator = z.enum(["before", "after"]);
 export type DueDateFilterComparator = z.infer<typeof DueDateFilterComparator>;
 
 /**
@@ -166,7 +166,6 @@ export type StringFilterComparator = z.infer<typeof StringFilterComparator>;
 export type ParsedFilter =
   | { field: "status"; comparator: StatusFilterComparator; value: CalculatedStatus }
   | { field: "priority"; comparator: PriorityFilterComparator; value: Priority }
-  | { field: "dueDate"; comparator: DueDateFilterComparator; value: string }
   | { field: "title"; comparator: StringFilterComparator; value: string }
   | { field: "description"; comparator: StringFilterComparator; value: string };
 
@@ -227,15 +226,18 @@ export type TodoListResponse = SuccessResponse<Todo[]>;
 
 /**
  * List Todos Query Parameters
- * Format: fieldname=comparator:value
+ * Format: fieldname=comparator:value (for status, priority, title, description)
+ *         or direct value (for dueDateBefore, dueDateAfter)
  * Example: ?status=equals:initial&priority=notEquals:low&title=contains:meeting
+ * Example with date range: ?dueDateBefore=2025-12-31&dueDateAfter=2025-01-01
  * 
- * Note: Only one filter per field is allowed
+ * Note: Only one filter per field is allowed (except dueDateBefore and dueDateAfter can be used together)
  */
 export const ListTodosQuerySchema = z.object({
   status: z.string().regex(/^(equals|notEquals):(initial|complete|due)$/).optional(),
   priority: z.string().regex(/^(equals|notEquals):(low|medium|high|urgent)$/).optional(),
-  dueDate: z.string().regex(/^(before|after|notBefore|notAfter):\d{4}-\d{2}-\d{2}$/).optional(),
+  dueDateBefore: DateStringSchema.optional(),
+  dueDateAfter: DateStringSchema.optional(),
   title: z.string().regex(/^(contains|notContains):.+$/).optional(),
   description: z.string().regex(/^(contains|notContains):.+$/).optional(),
 });

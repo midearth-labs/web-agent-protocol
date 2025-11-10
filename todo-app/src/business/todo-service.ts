@@ -87,7 +87,7 @@ export class TodoService {
   async listTodos(filters?: {
     status?: { equals?: string; notEquals?: string };
     priority?: { equals?: string; notEquals?: string };
-    dueDate?: { before?: string; after?: string; notBefore?: string; notAfter?: string };
+    dueDate?: { before?: string; after?: string };
     title?: { contains?: string; notContains?: string };
     description?: { contains?: string; notContains?: string };
   }): Promise<TodoDTO[]> {
@@ -130,7 +130,7 @@ export class TodoService {
     filters: {
       status?: { equals?: string; notEquals?: string };
       priority?: { equals?: string; notEquals?: string };
-      dueDate?: { before?: string; after?: string; notBefore?: string; notAfter?: string };
+      dueDate?: { before?: string; after?: string };
       title?: { contains?: string; notContains?: string };
       description?: { contains?: string; notContains?: string };
     }
@@ -156,24 +156,20 @@ export class TodoService {
         }
       }
 
-      // Due date filter
+      // Due date filter (before and after can be used independently or together for range filtering)
       if (filters.dueDate) {
         if (todo.dueDate === null) {
           // If todo has no due date, it doesn't match any date filter
-          if (filters.dueDate.before || filters.dueDate.after || filters.dueDate.notBefore || filters.dueDate.notAfter) {
+          if (filters.dueDate.before || filters.dueDate.after) {
             return false;
           }
         } else {
+          // dueDateBefore means todo.dueDate < dueDateBefore
           if (filters.dueDate.before !== undefined && todo.dueDate >= filters.dueDate.before) {
             return false;
           }
+          // dueDateAfter means todo.dueDate > dueDateAfter
           if (filters.dueDate.after !== undefined && todo.dueDate <= filters.dueDate.after) {
-            return false;
-          }
-          if (filters.dueDate.notBefore !== undefined && todo.dueDate < filters.dueDate.notBefore) {
-            return false;
-          }
-          if (filters.dueDate.notAfter !== undefined && todo.dueDate > filters.dueDate.notAfter) {
             return false;
           }
         }

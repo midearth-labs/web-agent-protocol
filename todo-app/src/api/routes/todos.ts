@@ -15,14 +15,14 @@ import type { CreateTodoRequest, ListTodosQuery, TodoIdParam, UpdateTodoRequest,
 function parseFilters(query: ListTodosQuery): {
   status?: { equals?: string; notEquals?: string };
   priority?: { equals?: string; notEquals?: string };
-  dueDate?: { before?: string; after?: string; notBefore?: string; notAfter?: string };
+  dueDate?: { before?: string; after?: string };
   title?: { contains?: string; notContains?: string };
   description?: { contains?: string; notContains?: string };
 } | undefined {
   const filters: {
     status?: { equals?: string; notEquals?: string };
     priority?: { equals?: string; notEquals?: string };
-    dueDate?: { before?: string; after?: string; notBefore?: string; notAfter?: string };
+    dueDate?: { before?: string; after?: string };
     title?: { contains?: string; notContains?: string };
     description?: { contains?: string; notContains?: string };
   } = {};
@@ -47,17 +47,14 @@ function parseFilters(query: ListTodosQuery): {
     }
   }
 
-  // Parse dueDate filter
-  if (query.dueDate) {
-    const { comparator, value } = parseFilterParam(query.dueDate);
-    if (comparator === "before") {
-      filters.dueDate = { before: value };
-    } else if (comparator === "after") {
-      filters.dueDate = { after: value };
-    } else if (comparator === "notBefore") {
-      filters.dueDate = { notBefore: value };
-    } else if (comparator === "notAfter") {
-      filters.dueDate = { notAfter: value };
+  // Parse dueDate filters (dueDateBefore and dueDateAfter can be used independently or together)
+  if (query.dueDateBefore || query.dueDateAfter) {
+    filters.dueDate = {};
+    if (query.dueDateBefore) {
+      filters.dueDate.before = query.dueDateBefore;
+    }
+    if (query.dueDateAfter) {
+      filters.dueDate.after = query.dueDateAfter;
     }
   }
 

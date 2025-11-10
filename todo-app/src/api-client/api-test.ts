@@ -267,12 +267,12 @@ describe("ApiClient E2E Tests", () => {
 
   describe("List Todos - Due Date Filters", () => {
     test(
-      "should filter by dueDate before",
+      "should filter by dueDateBefore",
       { timeout: TEST_TIMEOUT },
       async () => {
         const beforeDate = getFutureDate(20);
         const response = await client.listTodos({
-          query: { dueDate: `before:${beforeDate}` },
+          query: { dueDateBefore: beforeDate },
         });
         assert.ok(response.data, "Response should have data");
         assert.ok(Array.isArray(response.data), "Data should be an array");
@@ -285,12 +285,12 @@ describe("ApiClient E2E Tests", () => {
     );
 
     test(
-      "should filter by dueDate after",
+      "should filter by dueDateAfter",
       { timeout: TEST_TIMEOUT },
       async () => {
         const afterDate = getFutureDate(10);
         const response = await client.listTodos({
-          query: { dueDate: `after:${afterDate}` },
+          query: { dueDateAfter: afterDate },
         });
         assert.ok(response.data, "Response should have data");
         assert.ok(Array.isArray(response.data), "Data should be an array");
@@ -303,36 +303,23 @@ describe("ApiClient E2E Tests", () => {
     );
 
     test(
-      "should filter by dueDate notBefore",
+      "should filter by dueDateBefore and dueDateAfter together (range filter)",
       { timeout: TEST_TIMEOUT },
       async () => {
-        const notBeforeDate = getFutureDate(5);
+        const afterDate = getFutureDate(5);
+        const beforeDate = getFutureDate(25);
         const response = await client.listTodos({
-          query: { dueDate: `notBefore:${notBeforeDate}` },
+          query: {
+            dueDateBefore: beforeDate,
+            dueDateAfter: afterDate,
+          },
         });
         assert.ok(response.data, "Response should have data");
         assert.ok(Array.isArray(response.data), "Data should be an array");
         response.data.forEach((todo) => {
           if (todo.dueDate) {
-            assert.ok(todo.dueDate >= notBeforeDate, "Due date should not be before the specified date");
-          }
-        });
-      }
-    );
-
-    test(
-      "should filter by dueDate notAfter",
-      { timeout: TEST_TIMEOUT },
-      async () => {
-        const notAfterDate = getFutureDate(25);
-        const response = await client.listTodos({
-          query: { dueDate: `notAfter:${notAfterDate}` },
-        });
-        assert.ok(response.data, "Response should have data");
-        assert.ok(Array.isArray(response.data), "Data should be an array");
-        response.data.forEach((todo) => {
-          if (todo.dueDate) {
-            assert.ok(todo.dueDate <= notAfterDate, "Due date should not be after the specified date");
+            assert.ok(todo.dueDate > afterDate, "Due date should be after the specified date");
+            assert.ok(todo.dueDate < beforeDate, "Due date should be before the specified date");
           }
         });
       }
@@ -480,7 +467,7 @@ describe("ApiClient E2E Tests", () => {
         const beforeDate = getFutureDate(20);
         const response = await client.listTodos({
           query: {
-            dueDate: `before:${beforeDate}`,
+            dueDateBefore: beforeDate,
             priority: "equals:high",
           },
         });

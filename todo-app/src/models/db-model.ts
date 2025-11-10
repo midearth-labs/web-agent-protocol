@@ -168,8 +168,6 @@ export type PriorityFilter = {
 export type DueDateFilter = {
   before?: string;
   after?: string;
-  notBefore?: string;
-  notAfter?: string;
 };
 
 /**

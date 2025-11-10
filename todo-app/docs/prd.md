@@ -113,11 +113,11 @@ The following status transitions are allowed:
 Users can filter todos by:
 - **Status**: Equality and negation filters (equals, notEquals)
 - **Priority**: Equality and negation filters (equals, notEquals) - valid values: low, medium, high, urgent
-- **Due Date**: Range filters (before, after) and negation (notBefore, notAfter) - format: YYYY-MM-DD
+- **Due Date**: Range filters (dueDateBefore, dueDateAfter) - format: YYYY-MM-DD, can be used independently or together for range filtering
 - **Title**: Contains/like filters and negation (contains, notContains) - case-insensitive
 - **Description**: Contains/like filters and negation (contains, notContains) - case-insensitive
 
-**Filter Combination Logic**: All filters are combined using AND logic (all filters must match)
+**Filter Combination Logic**: All filters are combined using AND logic (all filters must match). Due date filters (dueDateBefore and dueDateAfter) can be used together to create a date range.
 
 ### 5.6 Validation Rules
 - **ID**: Required (system-generated UUID), cannot be set by user
@@ -225,7 +225,7 @@ Users can filter todos by:
 - Each todo in the list shows: UUID (required), title (required), description (optional), status (required), due date (optional), priority (required), created at (required), and modified at (required)
 - User can filter by status using equality (equals, notEquals)
 - User can filter by priority using equality (equals, notEquals) - values: low, medium, high, urgent
-- User can filter by due date using range filters (before, after, notBefore, notAfter) - format: YYYY-MM-DD
+- User can filter by due date using range filters (dueDateBefore, dueDateAfter) - format: YYYY-MM-DD, can be used independently or together for range filtering
 - User can filter by title using contains/like filters (contains, notContains) - case-insensitive
 - User can filter by description using contains/like filters (contains, notContains) - case-insensitive
 - Multiple filters can be applied together using AND logic (all filters must match)

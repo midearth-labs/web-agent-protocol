@@ -80,11 +80,11 @@ Each todo consists of:
 Users can filter by:
 - **Status**: equals, notEquals
 - **Priority**: equals, notEquals (values: low, medium, high, urgent)
-- **Due Date**: before, after, notBefore, notAfter (format: YYYY-MM-DD)
+- **Due Date**: dueDateBefore, dueDateAfter (format: YYYY-MM-DD, can be used independently or together for range filtering)
 - **Title**: contains, notContains (case-insensitive)
 - **Description**: contains, notContains (case-insensitive)
 
-**Filter Logic**: All filters combined with AND (all must match)
+**Filter Logic**: All filters combined with AND (all must match). Due date filters can be used together to create a date range.
 
 ---
 

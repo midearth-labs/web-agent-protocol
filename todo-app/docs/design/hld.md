@@ -139,18 +139,21 @@ GET /api/v1/todos
 ```
 
 **Query Parameters** (all optional):
-Filter format: `fieldname=comparator:value`
+Filter format: `fieldname=comparator:value` (for status, priority, title, description) or direct value (for dueDate)
 
 - `status=equals:initial|complete|due` or `status=notEquals:initial|complete|due`
 - `priority=equals:low|medium|high|urgent` or `priority=notEquals:low|medium|high|urgent`
-- `dueDate=before:YYYY-MM-DD` or `dueDate=after:YYYY-MM-DD` or `dueDate=notBefore:YYYY-MM-DD` or `dueDate=notAfter:YYYY-MM-DD`
+- `dueDateBefore=YYYY-MM-DD` (filters todos with due date before this date)
+- `dueDateAfter=YYYY-MM-DD` (filters todos with due date after this date)
 - `title=contains:text` or `title=notContains:text` (case-insensitive)
 - `description=contains:text` or `description=notContains:text` (case-insensitive)
 
 **Filter Rules**:
-- Only one filter per field is allowed
+- Only one filter per field is allowed (except dueDateBefore and dueDateAfter can be used together)
 - Multiple different fields can be combined with AND logic
+- `dueDateBefore` and `dueDateAfter` can be used independently or together for range filtering
 - Example: `?status=equals:initial&priority=notEquals:low&title=contains:meeting`
+- Example with date range: `?dueDateBefore=2025-12-31&dueDateAfter=2025-01-01`
 
 **Filter Logic**: AND combination of all provided filters
 

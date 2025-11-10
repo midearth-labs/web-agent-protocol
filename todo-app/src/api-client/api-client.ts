@@ -140,7 +140,8 @@ export class ApiClient {
     if (query) {
       if (query["status"]) queryParams["status"] = query["status"];
       if (query["priority"]) queryParams["priority"] = query["priority"];
-      if (query["dueDate"]) queryParams["dueDate"] = query["dueDate"];
+      if (query["dueDateBefore"]) queryParams["dueDateBefore"] = query["dueDateBefore"];
+      if (query["dueDateAfter"]) queryParams["dueDateAfter"] = query["dueDateAfter"];
       if (query["title"]) queryParams["title"] = query["title"];
       if (query["description"]) queryParams["description"] = query["description"];
     }

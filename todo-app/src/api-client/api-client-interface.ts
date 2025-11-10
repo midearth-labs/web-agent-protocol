@@ -118,13 +118,15 @@ type UpdateTodoRequest = {
 /**
  * List Todos Query Parameters (flattened)
  * 
- * Filter format: fieldname=comparator:value
- * Only one filter per field is allowed.
+ * Filter format: fieldname=comparator:value (for status, priority, title, description)
+ *                or direct value (for dueDateBefore, dueDateAfter)
+ * Only one filter per field is allowed (except dueDateBefore and dueDateAfter can be used together).
  * Multiple different fields can be combined with AND logic.
  * 
  * @property status - Optional, format: "equals:initial" | "equals:complete" | "equals:due" | "notEquals:initial" | "notEquals:complete" | "notEquals:due"
  * @property priority - Optional, format: "equals:low" | "equals:medium" | "equals:high" | "equals:urgent" | "notEquals:low" | "notEquals:medium" | "notEquals:high" | "notEquals:urgent"
- * @property dueDate - Optional, format: "before:YYYY-MM-DD" | "after:YYYY-MM-DD" | "notBefore:YYYY-MM-DD" | "notAfter:YYYY-MM-DD"
+ * @property dueDateBefore - Optional, format: "YYYY-MM-DD" (filters todos with due date before this date)
+ * @property dueDateAfter - Optional, format: "YYYY-MM-DD" (filters todos with due date after this date)
  * @property title - Optional, format: "contains:text" | "notContains:text" (case-insensitive)
  * @property description - Optional, format: "contains:text" | "notContains:text" (case-insensitive)
  * 
@@ -137,14 +139,16 @@ type UpdateTodoRequest = {
  * 
  * @example
  * {
- *   dueDate: "before:2025-12-31",
+ *   dueDateBefore: "2025-12-31",
+ *   dueDateAfter: "2025-01-01",
  *   status: "notEquals:complete"
  * }
  */
 type ListTodosQuery = {
   status?: string | undefined; // "equals:initial" | "equals:complete" | "equals:due" | "notEquals:initial" | "notEquals:complete" | "notEquals:due"
   priority?: string | undefined; // "equals:low" | "equals:medium" | "equals:high" | "equals:urgent" | "notEquals:low" | "notEquals:medium" | "notEquals:high" | "notEquals:urgent"
-  dueDate?: string | undefined; // "before:YYYY-MM-DD" | "after:YYYY-MM-DD" | "notBefore:YYYY-MM-DD" | "notAfter:YYYY-MM-DD"
+  dueDateBefore?: string | undefined; // "YYYY-MM-DD" format
+  dueDateAfter?: string | undefined; // "YYYY-MM-DD" format
   title?: string | undefined; // "contains:text" | "notContains:text" (case-insensitive)
   description?: string | undefined; // "contains:text" | "notContains:text" (case-insensitive)
 };
