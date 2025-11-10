@@ -43,6 +43,18 @@ export function errorHandler(
 
   // Generic Error objects
   if (err instanceof Error) {
+    // Check if it's a "not found" error
+    if (err.message.includes("not found")) {
+      const errorResponse: ErrorResponse = {
+        error: {
+          code: ErrorCodes.NOT_FOUND,
+          message: err.message,
+        },
+      };
+      res.status(404).json(errorResponse);
+      return;
+    }
+
     const errorResponse: ErrorResponse = {
       error: {
         code: ErrorCodes.INTERNAL_ERROR,
