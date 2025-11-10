@@ -139,11 +139,11 @@ export class CacheService {
    * @throws FileWriteError if file cannot be written
    */
   private async commitCache(cacheCopy: TodosCache): Promise<void> {
+    // Sync to file (throws on error)
+    await this.fileStorage.writeFile(cacheCopy);
+
     // Commit to main cache
     this.cache = cacheCopy;
-
-    // Sync to file (throws on error)
-    await this.fileStorage.writeFile(this.cache);
   }
 
   /**

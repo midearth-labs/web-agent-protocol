@@ -10,7 +10,9 @@
     "dev": "tsx watch src/server.ts",
     "start": "node dist/src/server.js",
     "type-check": "tsc --noEmit",
-    "clean": "rm -rf dist"
+    "clean": "rm -rf dist",
+    "test": "npm run build && node --test dist/src/api-client/api-test.js",
+    "test:direct": "tsx --test src/api-client/api-test.ts"
   },
   "keywords": [
     "todo",
@@ -20,7 +22,9 @@
   "author": "",
   "license": "MIT",
   "dependencies": {
+    "@types/morgan": "^1.9.10",
     "express": "^5.1.0",
+    "morgan": "^1.10.1",
     "uuid": "^13.0.0",
     "zod": "^4.1.12"
   },
@@ -35,4 +39,3 @@
     "node": ">=18.0.0"
   }
 }
-

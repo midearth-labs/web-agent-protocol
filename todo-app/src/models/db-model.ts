@@ -306,7 +306,7 @@ export type FileErrorCode =
 /**
  * Default file paths
  */
-export const DEFAULT_FILE_PATH = "./data/todos.json" as const;
+export const DEFAULT_FILE_PATH = "/Users/oladipofasoro/workspace/web-agent-protocol/todo-app/src/data/todos.json" as const;
 export const DEFAULT_BACKUP_PATH = "./data/backups" as const;
 
 // ============================================================================

@@ -49,6 +49,7 @@ export function errorHandler(
   _next: NextFunction
 ): void {
   // Zod validation errors
+  console.log("err", err);
   if (err instanceof ZodError) {
     const errorResponse = formatZodError(err);
     res.status(400).json(errorResponse);

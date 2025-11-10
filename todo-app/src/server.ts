@@ -4,6 +4,7 @@
  */
 
 import express from "express";
+import morgan from "morgan";
 import { CacheService } from "./data/cache.js";
 import { TodoService } from "./business/todo-service.js";
 import { createTodoRoutes } from "./api/routes/todos.js";
@@ -37,6 +38,7 @@ async function main() {
   const app = express();
 
   // Middleware
+  app.use(morgan('dev'));
   app.use(express.json());
 
   // Routes
