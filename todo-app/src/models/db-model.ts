@@ -109,9 +109,9 @@ export type TodoDTO = {
  */
 export type CreateTodoInput = {
   title: string;
-  description: string | null;
-  dueDate: string | null;
-  priority: Priority;
+  description?: string | undefined | null;
+  dueDate?: string | undefined | null;
+  priority?: Priority | undefined | null;
 };
 
 /**
@@ -120,11 +120,11 @@ export type CreateTodoInput = {
  */
 export type UpdateTodoInput = {
   id: string;
-  title?: string;
-  description?: string | null;
-  dueDate?: string | null;
-  status?: StoredStatus;
-  priority?: Priority;
+  title?: string | undefined | null;
+  description?: string | undefined | null;
+  dueDate?: string | undefined | null;
+  status?: StoredStatus | undefined;
+  priority?: Priority | undefined;
 };
 
 /**

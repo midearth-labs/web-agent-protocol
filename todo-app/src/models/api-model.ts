@@ -35,7 +35,7 @@ const FutureDateSchema = z
       today.setHours(0, 0, 0, 0);
       return date >= today;
     },
-    { message: "Due date cannot be in the past" }
+    { error: "Due date cannot be in the past" }
   );
 
 /**
@@ -70,10 +70,10 @@ export type Todo = z.infer<typeof TodoSchema>;
  * Create Todo Request
  */
 export const CreateTodoRequestSchema = z.object({
-  title: z.string().min(1, "Title is required").max(100, "Title must not exceed 100 characters"),
+  title: z.string().min(1, { error: "Title is required" }).max(100, { error: "Title must not exceed 100 characters" }),
   description: z
     .string()
-    .max(1000, "Description must not exceed 1000 characters")
+    .max(1000, { error: "Description must not exceed 1000 characters" })
     .optional(),
   dueDate: FutureDateSchema.optional(),
   priority: PrioritySchema.optional(),
@@ -86,10 +86,10 @@ export type CreateTodoRequest = z.infer<typeof CreateTodoRequestSchema>;
  */
 export const UpdateTodoRequestSchema = z
   .object({
-    title: z.string().min(1, "Title is required").max(100, "Title must not exceed 100 characters").optional(),
+    title: z.string().min(1, { error: "Title is required" }).max(100, { error: "Title must not exceed 100 characters" }).optional(),
     description: z
       .string()
-      .max(1000, "Description must not exceed 1000 characters")
+      .max(1000, { error: "Description must not exceed 1000 characters" })
       .nullable()
       .optional(),
     dueDate: FutureDateSchema.nullable().optional(),
@@ -97,7 +97,7 @@ export const UpdateTodoRequestSchema = z
     priority: PrioritySchema.optional(),
   })
   .refine((data) => Object.keys(data).length > 0, {
-    message: "At least one field must be provided for update",
+    error: "At least one field must be provided for update",
   });
 
 export type UpdateTodoRequest = z.infer<typeof UpdateTodoRequestSchema>;
@@ -107,9 +107,9 @@ export type UpdateTodoRequest = z.infer<typeof UpdateTodoRequestSchema>;
  */
 export const BulkUpdateStatusRequestSchema = z.object({
   ids: z
-    .array(z.string().uuid("Invalid UUID format"))
-    .min(1, "At least one ID is required")
-    .max(100, "Maximum 100 todos can be updated at once"),
+    .array(z.uuid({ error: "Invalid UUID format" }))
+    .min(1, { error: "At least one ID is required" })
+    .max(100, { error: "Maximum 100 todos can be updated at once" }),
   status: StoredStatusSchema,
 });
 
@@ -120,9 +120,9 @@ export type BulkUpdateStatusRequest = z.infer<typeof BulkUpdateStatusRequestSche
  */
 export const BulkDeleteRequestSchema = z.object({
   ids: z
-    .array(z.string().uuid("Invalid UUID format"))
-    .min(1, "At least one ID is required")
-    .max(100, "Maximum 100 todos can be deleted at once"),
+    .array(z.uuid({ error: "Invalid UUID format" }))
+    .min(1, { error: "At least one ID is required" })
+    .max(100, { error: "Maximum 100 todos can be deleted at once" }),
 });
 
 export type BulkDeleteRequest = z.infer<typeof BulkDeleteRequestSchema>;
@@ -261,7 +261,7 @@ export const parseFilterParam = (param: string): { comparator: string; value: st
 // ============================================================================
 
 export const TodoIdParamSchema = z.object({
-  id: z.string().uuid("Invalid todo ID format"),
+  id: z.uuid({ error: "Invalid todo ID format" }),
 });
 
 export type TodoIdParam = z.infer<typeof TodoIdParamSchema>;

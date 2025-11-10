@@ -176,3 +176,204 @@ todo-app/src
 
 ---
 
+## Zod v4 Migration
+
+**Date**: 2025-11-10  
+**Decision**: Updated all Zod schemas to use Zod v4 semantics and avoid deprecated approaches.
+
+**Changes**:
+- Replaced `message` parameter with `error` parameter in validation methods
+- Updated `.min()`, `.max()`, `.uuid()` to use `{ error: "message" }` syntax
+- Updated `.refine()` to use `{ error: "message" }` instead of `{ message: "message" }`
+- Fixed ZodError handling: use `error.issues` instead of `error.errors` (v4 API)
+- Removed unused type imports
+
+**Updated Patterns**:
+- **Before (v3)**: `.min(1, "Title is required")`
+- **After (v4)**: `.min(1, { error: "Title is required" })`
+- **Before (v3)**: `.refine(..., { message: "error" })`
+- **After (v4)**: `.refine(..., { error: "error" })`
+- **Before (v3)**: `error.errors` (ZodError)
+- **After (v4)**: `error.issues` (ZodError)
+
+**Files Updated**:
+- `api-model.ts` - All validation schemas updated to v4 syntax
+- `error-handler.ts` - Updated to use `error.issues` instead of `error.errors`
+- `status-calculator.ts` - Removed unused imports
+- `todo-service.ts` - Removed unused imports
+
+**Rationale**: 
+- Zod v4 deprecates `message` parameter in favor of `error` for consistency
+- `error.issues` is the correct property name in Zod v4
+- Ensures compatibility with Zod v4.1.12 and future versions
+- Follows official Zod v4 migration guide
+
+---
+
+## Implementation Patterns & Conventions
+
+**Date**: 2025-11-10  
+**Decision**: Documented implementation patterns and styles based on createTodo API implementation.
+
+### Business Logic Layer Patterns
+
+**Return Types**:
+- Business logic methods **always return DTOs**, not entities
+- Use `entityToDTO()` to convert entities before returning
+- Example: `async createTodo(input: CreateTodoInput): Promise<TodoDTO>`
+
+**Entity Creation**:
+- Generate UUIDs using `randomUUID()` from `node:crypto` (not uuid library)
+- Use `new Date().toISOString()` for timestamps (ISO 8601 strings)
+- Apply defaults using `DEFAULT_VALUES` from `db-model.ts`
+- Use nullish coalescing (`??`) for optional fields
+
+**Code Style**:
+```typescript
+// Generate UUID
+const id = randomUUID();
+
+// Get current timestamp (ISO 8601 string)
+const now = new Date().toISOString();
+
+// Create entity with defaults
+const entity: TodoEntity = {
+  id,
+  title: input.title,
+  description: input.description ?? DEFAULT_VALUES.description,
+  status: DEFAULT_VALUES.status,
+  dueDate: input.dueDate ?? DEFAULT_VALUES.dueDate,
+  priority: input.priority ?? DEFAULT_VALUES.priority,
+  createdAt: now,
+  modifiedAt: now,
+};
+
+// Always convert to DTO before returning
+return this.entityToDTO(entity);
+```
+
+**Error Handling**:
+- Check cache operation results: `if (result && !result.success)`
+- Throw descriptive errors: `throw new Error(\`Failed to create todo: ${result.error.message}\`)`
+
+### API Layer Patterns
+
+**Route Handler Structure**:
+1. Use `validateBody()` middleware for request validation
+2. Convert API request types to business input types
+3. Call business logic service method
+4. Business layer returns DTO directly (already converted)
+5. Wrap in response format: `{ data: dto }`
+6. Use appropriate HTTP status codes (201 for create, 200 for updates, 204 for delete)
+
+**Code Style**:
+```typescript
+router.post(
+  "/",
+  validateBody(CreateTodoRequestSchema),
+  async (req: Request<unknown, TodoResponse, CreateTodoRequest>, res: Response<TodoResponse>) => {
+    const input = req.body;
+
+    // Convert API request to business input
+    const createInput = {
+      title: input.title,
+      description: input.description,
+      dueDate: input.dueDate,
+      priority: input.priority,
+    };
+
+    // Business layer returns DTO directly
+    const dto = await todoService.createTodo(createInput);
+
+    // Return response
+    res.status(201).json({ data: dto });
+  }
+);
+```
+
+**Type Usage**:
+- Request types: Import from `api-model.ts` (e.g., `CreateTodoRequest`)
+- Business input types: Import from `db-model.ts` (e.g., `CreateTodoInput`)
+- Response types: Import from `api-model.ts` (e.g., `TodoResponse`)
+- DTOs: Import from `db-model.ts` (e.g., `TodoDTO`)
+
+### Zod v4 Patterns
+
+**UUID Validation**:
+- **Use**: `z.uuid({ error: "message" })`
+- **NOT**: `z.string().uuid({ error: "message" })`
+- Direct `z.uuid()` is the correct Zod v4 syntax
+
+**Error Messages**:
+- Always use `{ error: "message" }` syntax
+- Never use deprecated `message` parameter
+- Apply to: `.min()`, `.max()`, `.refine()`, `.uuid()`, etc.
+
+**Examples**:
+```typescript
+// Correct
+z.uuid({ error: "Invalid UUID format" })
+z.string().min(1, { error: "Title is required" })
+z.refine(..., { error: "Due date cannot be in the past" })
+
+// Incorrect (deprecated)
+z.string().uuid({ error: "Invalid UUID format" })
+z.string().min(1, "Title is required")
+z.refine(..., { message: "Due date cannot be in the past" })
+```
+
+### Type Conversion Flow
+
+**API Request → Business Input → Entity → DTO → API Response**:
+1. **API Layer**: Receives `CreateTodoRequest` (from `api-model.ts`)
+2. **API Layer**: Converts to `CreateTodoInput` (from `db-model.ts`)
+3. **Business Layer**: Creates `TodoEntity` (from `db-model.ts`)
+4. **Business Layer**: Converts to `TodoDTO` using `entityToDTO()` (includes calculated status)
+5. **API Layer**: Wraps DTO in `{ data: dto }` response format
+
+**Key Points**:
+- Business layer never exposes entities directly
+- Always use `entityToDTO()` to include calculated status
+- API layer handles request/response formatting only
+- Business layer handles all business logic and data transformation
+
+### File Organization
+
+**Business Logic** (`src/business/`):
+- `todo-service.ts` - Main service class with business methods
+- `status-calculator.ts` - Status calculation utilities
+- `index.ts` - Exports
+
+**API Layer** (`src/api/`):
+- `routes/todos.ts` - Route handlers (one file per resource)
+- `middleware/validator.ts` - Request validation middleware
+- `middleware/error-handler.ts` - Error handling middleware
+- `index.ts` - Exports
+
+**Naming Conventions**:
+- Service methods: `createTodo()`, `updateTodo()`, `deleteTodo()`, etc.
+- Route functions: `createTodoRoutes()` (returns Router)
+- Middleware: `validateBody()`, `errorHandler()`
+- Utility functions: `calculateStatus()`, `getCurrentDateUTC()`
+
+### Error Handling
+
+**Business Layer**:
+- Throw `Error` objects with descriptive messages
+- Check cache operation results before proceeding
+- Let errors bubble up to API layer
+
+**API Layer**:
+- Use `errorHandler` middleware (must be last)
+- Zod validation errors automatically handled (400 status)
+- Generic errors return 500 status with `INTERNAL_ERROR` code
+
+**Rationale**: 
+- Establishes consistent patterns for implementing new endpoints
+- Ensures DTOs are always returned (with calculated status)
+- Maintains clear separation between layers
+- Follows Zod v4 best practices
+- Makes follow-up implementations smoother and more predictable
+
+---
+
