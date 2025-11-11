@@ -361,6 +361,8 @@ function render(data, onAction) {
 - Do not import anything, use pure and native javascript objects and syntax.
 - Do not access any global objects like window in the function logic. You can of course include global objects in generated output e.g. `<button onclick="window.alert('foo-bar');" />`
 - Use SVG for Charts.
+- For user downloads e.g. "Find orders from last month and convert to CSV or JSON for my download": Use Blob Data URL and offer the user a download link with an appropriate name.
+  - Data Transformation logic can be generated and executed in-code in the client-side.
 
 **Event Handling:**
 - Call `onAction(actionId, payload)` when user clicks action buttons

@@ -3,20 +3,6 @@
  * Handles business rules, validation, and entity creation
  */
 
-import { randomUUID } from "node:crypto";
-import type {
-  TodoEntity,
-  CreateTodoInput,
-  UpdateTodoInput,
-  BulkUpdateStatusInput,
-  BulkDeleteInput,
-  StoredStatus,
-  TodosCache,
-} from "../models/db-model.js";
-import { DEFAULT_VALUES } from "../models/db-model.js";
-import type { CacheService } from "../data/cache.js";
-import { calculateStatus, getCurrentDateUTC } from "./status-calculator.js";
-import type { TodoDTO } from "../models/db-model.js";
 import {
   ResourceNotFoundError,
   ValidationError,
@@ -29,7 +15,7 @@ import {
  * Handles business logic for todo operations
  */
 export class TodoService {
-  constructor(private readonly cache: CacheService) {}
+  constructor() {}
 
   /**
    * Creates a new todo
@@ -37,7 +23,7 @@ export class TodoService {
    * @param input - Create todo input
    * @returns The created todo entity
    */
-  async createTodo(input: CreateTodoInput): Promise<TodoDTO> {
+  async inference(input: CreateTodoInput): Promise<TodoDTO> {
     // Generate UUID
     const id = randomUUID();
 
