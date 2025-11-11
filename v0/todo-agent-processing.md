@@ -1,13 +1,19 @@
 # User Journey Plans for Todo Management Requests
 
-This document provides step-by-step plans for implementing 5 different user requests using the IApiClient interface methods. Each journey follows the format established in the api-client-interface.ts User Journey Examples section.
+This document provides step-by-step plans for implementing 5 different user requests using the [IApiClient](https://github.com/midearth-labs/web-agent-protocol/blob/main/todo-app/src/api-client/api-client-interface.ts) interface methods. Each journey follows the format established in the api-client-interface.ts User Journey Examples section.
 
-### User Journeys / Requests
-1. Add a todo to review Q4 budget, make it due end of next week
-1. Mark all todos with 'meeting' in the title as complete
-1. Delete all todos that are overdue by more than 30 days
-1. I need to prepare slides for the investor meeting on Nov 15, book the conference room, and send agenda by Nov 13
-1. Push all incomplete todos due this week to next Monday, except anything with 'urgent' in it
+## Working Prompt (User Journeys / Requests)
+```
+Given the methods in IApiClient @api-client-interface.ts , show me a plan on how you will achieve each of the following requests individually:
+
+"Add a todo to review Q4 budget, make it due end of next week"
+"Mark all todos with 'meeting' in the title as complete"
+"Delete all todos that are overdue by more than 30 days"
+"I need to prepare slides for the investor meeting on Nov 15, book the conference room, and send agenda by Nov 13"
+"Push all incomplete todos due this week to next Monday, except anything with 'urgent' in it"
+
+Use the User Journeys examples output format to output the plan
+```
 
 ---
 

@@ -127,7 +127,7 @@ Natural language operates on the current page's UI elements.
 
 **Best for:** Filtering, sorting, form filling - interactions within a single page context.
 
-**Example:** On Amazon's search page  
+**Example:** On Amazon or Temu's search page  
 *User:* "Show me 30lb dumbbells under $100 with 4+ stars"  
 *Agent:* Applies filters directly to the page's search interface
 
