@@ -606,8 +606,6 @@
         "items": {
           "type": "OBJECT",
           "properties": {
-            "type": "OBJECT",
-            "properties": {
               "id": {
                 "type": "STRING",
                 "description": "Unique identifier (UUID v4)",
@@ -659,9 +657,8 @@
                 "format": "date-time",
                 "nullable": false
               }
-            },
-            "required": ["id", "title", "status", "priority", "createdAt", "modifiedAt"]
-          }
+          },
+          "required": ["id", "title", "status", "priority", "createdAt", "modifiedAt"]
         },
         "nullable": false,
         "examples": [
