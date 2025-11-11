@@ -5,11 +5,16 @@
 
 import express from "express";
 import morgan from "morgan";
+import path from "path";
+import { fileURLToPath } from "url";
 import { CacheService } from "./data/cache.js";
 import { TodoService } from "./business/todo-service.js";
 import { createTodoRoutes } from "./api/routes/todos.js";
 import { errorHandler } from "./api/middleware/error-handler.js";
 import { DEFAULT_FILE_PATH } from "./models/db-model.js";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const PORT = process.env['PORT'] ? parseInt(process.env['PORT'], 10) : 3000;
 const FILE_PATH = process.env['TODOS_FILE_PATH'] || DEFAULT_FILE_PATH;
@@ -40,6 +45,9 @@ async function main() {
   // Middleware
   app.use(morgan('dev'));
   app.use(express.json());
+
+  // Serve static files from public directory
+  app.use(express.static(path.join(__dirname, "public")));
 
   // Routes
   app.use("/api/v1/todos", createTodoRoutes(todoService));
