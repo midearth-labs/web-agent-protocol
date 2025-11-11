@@ -313,7 +313,7 @@ The generated JavaScript function must conform to this interface:
  */
 type RenderFunction = (
   data: Record<string, any>,
-  onAction: (actionId: string) => void
+  onAction: (actionId: string, payload?: Record<string, any>) => void
 ) => string;
 ```
 
@@ -346,7 +346,7 @@ Generate a JavaScript function with this exact signature:
 
 ```javascript
 function render(data, onAction) {
-  // Your implementation here
+  // Your implementation here, these could include transforms, loops, etc.
   return `<html string>`;
 }
 ```
@@ -357,10 +357,13 @@ function render(data, onAction) {
 - Make the UI responsive (mobile-friendly)
 - Use semantic HTML5 elements
 - Ensure accessibility (ARIA labels, keyboard navigation)
-- Handle empty data gracefully
+- Handle empty and null data gracefully
+- Do not import anything, use pure and native javascript objects and syntax.
+- Do not access any global objects like window in the function logic. You can of course include global objects in generated output e.g. `<button onclick="window.alert('foo-bar');" />`
+- Use SVG for Charts.
 
 **Event Handling:**
-- Call `onAction(actionId)` when user clicks action buttons
+- Call `onAction(actionId, payload)` when user clicks action buttons
 - Use inline onclick handlers or CustomEvent dispatch
 - No external event listener registration
 
@@ -412,7 +415,10 @@ Return ONLY the JavaScript function code. Do not include markdown formatting, ex
 Example:
 ```javascript
 function render(data, onAction) {
+  function helperFunctionA() {} // Reusable logic
+  function helperFunctionB() {} // Reusable logic
   const {items} = data;
+  // Your implementation here, these could include transforms, loops, etc.
   return `<div class="p-4">...</div>`;
 }
 ```
@@ -998,62 +1004,6 @@ function handleUserAction(actionId: string) {
   }
 }
 ```
-
----
-
-## Implementation Phases
-
-### Phase 1: Core Orchestration (4 weeks)
-
-**Deliverables:**
-- Gemini function calling integration
-- Tag-based operation discovery
-- Basic multi-step execution (preview → confirm → execute)
-- Simple render tool implementation
-
-**Success Criteria:**
-- Can execute bulk delete with preview
-- Generates basic table UIs
-- Handles user confirmations
-
-### Phase 2: Advanced Rendering (3 weeks)
-
-**Deliverables:**
-- Enhanced render prompt engineering
-- Multiple step type templates (preview, confirm, progress, result, error)
-- Render function caching
-- Security validation
-
-**Success Criteria:**
-- Generates production-quality UIs
-- Handles all step types
-- Passes security audit
-
-### Phase 3: Optimization (3 weeks)
-
-**Deliverables:**
-- Parallel tool calling
-- Batch operation chunking
-- Progress indicators
-- Performance monitoring
-
-**Success Criteria:**
-- 90% reduction in sequential API calls
-- Sub-second render generation
-- Smooth UX for large batch operations
-
-### Phase 4: Polish (2 weeks)
-
-**Deliverables:**
-- Error recovery flows
-- Accessibility improvements
-- Mobile optimization
-- Analytics integration
-
-**Success Criteria:**
-- Handles all error cases gracefully
-- WCAG 2.1 AA compliant UIs
-- Works on mobile browsers
 
 ---
 
