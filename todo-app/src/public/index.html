@@ -8,7 +8,7 @@
 
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-    <title>WAP Engine Demo Todo App</title>
+    <title>WAP Orchestrator - Todo App</title>
 
     <!-- Tailwind CSS via CDN -->
 
@@ -16,19 +16,157 @@
 
 </head>
 
-<body>
+<body class="bg-gray-50">
 
-    <h1 class="text-4xl font-bold text-blue-500 text-center mt-12">
+    <div class="container mx-auto px-4 py-8 max-w-4xl">
 
-        Hello Tailwind!
+        <h1 class="text-4xl font-bold text-blue-600 text-center mb-8">
 
-    </h1>
+            WAP Orchestrator
 
-    <p class="text-xl text-gray-700 mt-4 text-center">
+        </h1>
 
-        This is a vanilla HTML page with Tailwind CSS imported via CDN.
+        <p class="text-lg text-gray-600 text-center mb-8">
 
-    </p>
+            Natural language interface for todo management
+
+        </p>
+
+        <!-- API Key Section -->
+        <div class="bg-white rounded-lg shadow-md p-6 mb-6">
+            <label for="apiKeyInput" class="block text-sm font-medium text-gray-700 mb-2">
+                Gemini API Key
+            </label>
+            <div class="flex gap-4">
+                <input
+                    type="password"
+                    id="apiKeyInput"
+                    placeholder="Enter your Gemini API key (stored in sessionStorage)"
+                    class="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+                <button
+                    id="saveApiKeyBtn"
+                    class="px-6 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-500"
+                >
+                    Save
+                </button>
+            </div>
+            <p class="text-xs text-gray-500 mt-2">
+                Your API key is stored in sessionStorage and will persist for this browser session.
+            </p>
+        </div>
+
+        <!-- Input Section -->
+
+        <div class="bg-white rounded-lg shadow-md p-6 mb-6">
+
+            <div class="flex gap-4">
+
+                <input
+
+                    type="text"
+
+                    id="userInput"
+
+                    placeholder="Enter your request (e.g., 'List all todos' or 'Delete all completed items')"
+
+                    class="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+
+                />
+
+                <button
+
+                    id="submitBtn"
+
+                    class="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+
+                >
+
+                    Submit
+
+                </button>
+
+            </div>
+
+        </div>
+
+        <!-- Display Section -->
+
+        <div id="displayArea" class="space-y-4">
+
+            <!-- Thinking will be displayed here -->
+
+            <div id="thinkingContainer" class="hidden bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+
+                <h3 class="font-semibold text-yellow-800 mb-2">Thinking:</h3>
+
+                <div id="thinkingContent" class="text-yellow-700 whitespace-pre-wrap"></div>
+
+            </div>
+
+            <!-- UI will be displayed here -->
+
+            <div id="uiContainer" class="hidden"></div>
+
+            <!-- Response will be displayed here -->
+
+            <div id="responseContainer" class="hidden bg-green-50 border border-green-200 rounded-lg p-4">
+
+                <h3 class="font-semibold text-green-800 mb-2">Response:</h3>
+
+                <div id="responseContent" class="text-green-700"></div>
+
+            </div>
+
+            <!-- Error will be displayed here -->
+
+            <div id="errorContainer" class="hidden bg-red-50 border border-red-200 rounded-lg p-4">
+
+                <h3 class="font-semibold text-red-800 mb-2">Error:</h3>
+
+                <div id="errorContent" class="text-red-700"></div>
+
+            </div>
+
+        </div>
+
+    </div>
+
+    <!-- Orchestrator Script (will be bundled) -->
+    <script type="module" src="/dist/src/orchestrator/index.js"></script>
+
+    <!-- API Key Management Script -->
+    <script>
+        // Load saved API key on page load
+        const apiKeyInput = document.getElementById("apiKeyInput");
+        const saveApiKeyBtn = document.getElementById("saveApiKeyBtn");
+
+        if (apiKeyInput && saveApiKeyBtn) {
+            // Load from sessionStorage
+            const savedKey = sessionStorage.getItem("GEMINI_API_KEY");
+            if (savedKey) {
+                apiKeyInput.value = savedKey;
+            }
+
+            // Save to sessionStorage
+            saveApiKeyBtn.addEventListener("click", () => {
+                const apiKey = apiKeyInput.value.trim();
+                if (apiKey) {
+                    sessionStorage.setItem("GEMINI_API_KEY", apiKey);
+                    alert("API key saved to sessionStorage!");
+                } else {
+                    alert("Please enter an API key");
+                }
+            });
+
+            // Also save on Enter key
+            apiKeyInput.addEventListener("keypress", (e) => {
+                if (e.key === "Enter") {
+                    saveApiKeyBtn.click();
+                }
+            });
+        }
+    </script>
 
 </body>
 

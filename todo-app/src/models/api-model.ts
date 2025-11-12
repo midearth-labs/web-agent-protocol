@@ -74,8 +74,10 @@ export const CreateTodoRequestSchema = z.object({
   description: z
     .string()
     .max(1000, { error: "Description must not exceed 1000 characters" })
+    .nullable()
     .optional(),
-  dueDate: FutureDateSchema.optional(),
+  dueDate: FutureDateSchema
+  .nullable().optional(),
   priority: PrioritySchema.optional(),
 });
 

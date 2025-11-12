@@ -111,7 +111,7 @@ function renderToolForGemini(): GeminiFunctionDeclaration {
         dataStructures: {
           type: Type.OBJECT,
           description:
-            "Named TypeScript type definitions as strings. Keys are variable names, values are type definitions."
+            "Named TypeScript type definitions as strings. Keys are variable names, values are type definitions. Includes inline descriptive comments."
         },
         mainGoal: { type: Type.STRING, description: "The user's original natural language request" },
         subGoal: { type: Type.STRING, description: "What this specific substep is trying to achieve" },
