@@ -22,6 +22,14 @@ export type FunctionCall = {
 }
 
 /**
+ * Render function call with typed arguments matching render tool structure
+ */
+export type RenderFunctionCall = FunctionCall & {
+  name: "render";
+  args: RenderToolParams;
+}
+
+/**
  * Function response to send back to Gemini
  */
 export type FunctionResponse = {
@@ -63,6 +71,25 @@ export type ResponseCallback = (text: string) => void;
 export type ErrorCallback = (error: Error) => void;
 
 /**
+ * Callback for render retry dialog
+ * Returns true if user wants to retry, false if they want to cancel
+ */
+export type RenderRetryCallback = (error: Error, renderCall: RenderFunctionCall) => Promise<boolean>;
+
+/**
+ * Structured user action response to send back to Gemini
+ */
+export type UserActionResponse = {
+  actionId: string;
+  payload?: Record<string, unknown>;
+}
+
+/**
+ * Callback for orchestration completion
+ */
+export type CompletionCallback = () => void;
+
+/**
  * Orchestrator callbacks
  */
 export type OrchestratorCallbacks = {
@@ -71,14 +98,28 @@ export type OrchestratorCallbacks = {
   onResponse?: ResponseCallback;
   onError?: ErrorCallback;
   onUserAction?: UserActionCallback;
+  onRenderRetry?: RenderRetryCallback;
+  onComplete?: CompletionCallback;
+}
+
+/**
+ * Abort function to cancel ongoing orchestration
+ */
+export type AbortFunction = () => void;
+
+/**
+ * Return type from orchestrate function
+ */
+export type OrchestrateResult = {
+  abort: AbortFunction;
 }
 
 /**
  * Render tool parameters
  */
 export type RenderToolParams = {
-  dataStructures: Record<string, string>;
-  data: Record<string, unknown>; // Actual data to render - keys must match dataStructures
+  dataStructure: string;
+  data: Record<string, unknown>; // Actual data to render - keys must match dataStructure
   mainGoal: string;
   subGoal: string;
   stepType: "preview" | "confirm" | "progress" | "result" | "error";
@@ -94,5 +135,15 @@ export type RenderToolParams = {
     operationType?: string;
     isDestructive?: boolean;
   };
+}
+
+/**
+ * Render tool response structure
+ * Matches the structured user action response sent back to Gemini
+ */
+export type RenderToolResponse = {
+  type: "userAction";
+  actionId: string;
+  payload?: Record<string, unknown>;
 }
 

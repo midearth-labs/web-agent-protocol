@@ -108,15 +108,15 @@ function renderToolForGemini(): GeminiFunctionDeclaration {
     parameters: {
       type: Type.OBJECT,
       properties: {
-        dataStructures: {
-          type: Type.OBJECT,
+        dataStructure: {
+          type: Type.STRING,
           description:
-            "Named TypeScript type definitions as strings. Keys are variable names, values are type definitions. Includes inline descriptive comments."
+            "TypeScript type definitions as a string. Includes inline descriptive comments for each property, even inner properties."
         },
         data: {
           type: Type.OBJECT,
           description:
-            "The actual data to render. Keys must match the variable names in dataStructures. This is the data that will be passed to the generated render function."
+            "The actual data to render. Structure must align with the typescript structure defined in dataStructure. This is the data that will be passed to the generated render function."
         },
         mainGoal: { type: Type.STRING, description: "The user's original natural language request" },
         subGoal: { type: Type.STRING, description: "What this specific substep is trying to achieve" },
@@ -152,7 +152,27 @@ function renderToolForGemini(): GeminiFunctionDeclaration {
           }
         }
       },
-      required: ["dataStructures", "data", "mainGoal", "subGoal", "stepType", "actions"]
+      required: ["dataStructure", "data", "mainGoal", "subGoal", "stepType", "actions"]
+    },
+    response: {
+      type: Type.OBJECT,
+      description: "Structured user action response when user interacts with the rendered UI",
+      properties: {
+        type: {
+          type: Type.STRING,
+          description: "Response type identifier",
+          enum: ["userAction"]
+        },
+        actionId: {
+          type: Type.STRING,
+          description: "The ID of the action that the user triggered from the rendered UI"
+        },
+        payload: {
+          type: Type.OBJECT,
+          description: "Optional payload data associated with the user action. Contains any additional data the user provided when triggering the action."
+        }
+      },
+      required: ["type", "actionId"]
     }
   };
 }

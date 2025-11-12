@@ -313,7 +313,7 @@ The generated JavaScript function must conform to this interface:
  */
 type RenderFunction = (
   data: Record<string, any>,
-  onAction: (actionId: string, payload?: Record<string, any>) => void
+  onAction: (action: { actionId: string; payload?: Record<string, any> }) => void
 ) => string;
 ```
 
@@ -342,7 +342,7 @@ The user can take these actions:
 
 # Requirements
 
-Generate a JavaScript function with this exact signature:
+Generate a JavaScript function with this exact signature, use the RenderFunction typescript example to understand its structure better:
 
 ```javascript
 function render(data, onAction) {
@@ -350,6 +350,21 @@ function render(data, onAction) {
   return `<html string>`;
 }
 ```
+
+```typescript
+/**
+ * Generated render function signature
+ * 
+ * @param data - Object with keys matching dataStructures parameter names
+ * @param onAction - Callback invoked when user clicks action button
+ * @returns HTML string with inline event handlers
+ */
+type RenderFunction = (
+  data: Record<string, any>,
+  onAction: (action: { actionId: string; payload?: Record<string, any> }) => void
+) => string;
+```
+**IMPORTANT: THE TYPESCRIPT IS JUST TO UNDERSTAND THE SIGNATURE. DO NOT GENERATE TYPESCRIPT CODE, ONLY SAFE JAVASCRIPT CODE OF THE "render" function THAT WILL BE RUN IN THE BROWSER**
 
 **Technical Requirements:**
 - Return a single HTML string
@@ -365,7 +380,7 @@ function render(data, onAction) {
   - Data Transformation logic can be generated and executed in-code in the client-side.
 
 **Event Handling:**
-- Call `onAction(actionId, payload)` when user clicks action buttons
+- Call `onAction(action)` when user clicks action buttons, where `action` is an object with `{ actionId: string, payload?: Record<string, any> }`
 - Use inline onclick handlers or CustomEvent dispatch
 - No external event listener registration
 
@@ -640,9 +655,7 @@ async function orchestrate(userInput: string, manifest: WAPManifest) {
         const renderData = extractRenderData(fc.functionCall.args, functionResponses);
         
         // Display UI
-        const html = renderFn(renderData, (actionId) => {
-          handleUserAction(actionId, conversation);
-        });
+        const html = renderFn(renderData, handleUserAction);
         
         displayUI(html);
         
@@ -995,14 +1008,14 @@ try {
 ### User Cancellation
 
 ```typescript
-function handleUserAction(actionId: string) {
-  if (actionId === "cancel") {
+function handleUserAction(action: { actionId: string; payload?: Record<string, any> }) {
+  if (action.actionId === "cancel") {
     // Stop orchestration
     cancelOrchestration();
     displayMessage("Operation cancelled");
   } else {
     // Continue with next step
-    resumeOrchestration(actionId);
+    resumeOrchestration(action.actionId, action.payload);
   }
 }
 ```

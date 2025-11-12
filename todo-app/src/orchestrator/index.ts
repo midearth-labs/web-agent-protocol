@@ -32,9 +32,12 @@ export async function initOrchestrator(
   return {
     /**
      * Execute orchestration for user input
+     * Returns abort function to cancel the workflow immediately
+     * Orchestration runs in the background
      */
-    async execute(userInput: string): Promise<void> {
-      await orchestrate(userInput, config, callbacks);
+    execute(userInput: string): { abort: () => void } {
+      const result = orchestrate(userInput, config, callbacks);
+      return result;
     },
   };
 }

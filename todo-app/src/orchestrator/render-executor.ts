@@ -20,24 +20,12 @@ export type RenderGeminiClient = {
  * Build the prompt for render generation
  */
 function buildRenderPrompt(params: RenderToolParams): string {
-  const { dataStructures, mainGoal, subGoal, stepType, actions, metadata, taskCompleted } = params;
+  const { dataStructure, mainGoal, subGoal, stepType, actions, metadata, taskCompleted } = params;
 
-  const dataStructuresText = Object.entries(dataStructures)
-    .map(([name, type]) => `  ${name}: ${type}`)
-    .join("\n");
+  const actionsText = JSON.stringify(actions);
+  const dataStructureText = extractTypeScriptFunction(dataStructure);
 
-  const actionsText = actions
-    .map(
-      (action) =>
-        `  - ${action.id}: ${action.label} (${action.variant || "primary"}, continues: ${action.continues})`
-    )
-    .join("\n");
-
-  const metadataText = metadata
-    ? Object.entries(metadata)
-        .map(([key, value]) => `  ${key}: ${value}`)
-        .join("\n")
-    : "";
+  const metadataText = JSON.stringify(metadata);
 
   const taskCompletedText = taskCompleted === true ? "\nTask Completed: true (This is the final completion UI - make it clear the task is done)" : "";
 
@@ -48,28 +36,48 @@ function buildRenderPrompt(params: RenderToolParams): string {
 Main Goal: ${mainGoal}
 Sub-Goal: ${subGoal}
 Step Type: ${stepType}${taskCompletedText}
-${metadataText ? `\nMetadata:\n${metadataText}` : ""}
+${metadataText ? `\nMetadata:\n\`\`\`json${metadataText}\n\`\`\`` : ""}
 
 # Data Structures
 
-The function will receive data with these types:
-${dataStructuresText}
+The function will receive data with these typescript types:
+\`\`\`typescript
+${dataStructureText}
+\`\`\`
 
 # Available Actions
 
 The user can take these actions:
+\`\`\`json
 ${actionsText}
+\`\`\`
 
 # Requirements
 
-Generate a JavaScript function with this exact signature:
+Generate a JavaScript function with this exact signature, use the RenderFunction typescript example to understand its structure better:
 
 \`\`\`javascript
 function render(data, onAction) {
-  // Your implementation here, these could include transforms, loops, etc.
+  // Your implementation here, these could include transforms, loops, and using the available actions to generate buttons that will call the onAction callback when clicked, etc.
   return \`<html string>\`;
 }
 \`\`\`
+
+\`\`\`typescript
+/**
+ * Generated render function signature
+ * 
+ * @param data - Object with keys matching dataStructures parameter names
+ * @param onAction - Callback invoked when user clicks action button
+ * @returns HTML string with inline event handlers
+ */
+type RenderFunction = (
+  data: Record<string, any>,
+  onAction: (action: { actionId: string; payload?: Record<string, any> }) => void
+) => string;
+\`\`\`
+
+**IMPORTANT: THE TYPESCRIPT IS JUST TO UNDERSTAND THE SIGNATURE. DO NOT GENERATE TYPESCRIPT CODE, ONLY SAFE JAVASCRIPT CODE OF THE "render" function THAT WILL BE RUN IN THE BROWSER**
 
 **Technical Requirements:**
 - Return a single HTML string
@@ -85,7 +93,7 @@ function render(data, onAction) {
   - Data Transformation logic can be generated and executed in-code in the client-side.
 
 **Event Handling:**
-- Call \`onAction(actionId, payload)\` when user clicks action buttons
+- Call \`onAction(action)\` when user clicks action buttons, where \`action\` is an object with \`{ actionId: string, payload?: Record<string, unknown> }\` derived from the actions JSON defined.
 - Use inline onclick handlers or CustomEvent dispatch
 - No external event listener registration
 
@@ -165,6 +173,23 @@ function extractJavaScriptFunction(response: string): string {
   return code;
 }
 
+/**
+ * Extract TypeScript function from LLM response
+ */
+function extractTypeScriptFunction(response: string): string {
+    // Remove markdown code blocks if present
+    let code = response.trim();
+  
+    // Remove ```typescript or ``` markers
+    code = code.replace(/^```(?:typescript|ts)?\s*/m, "");
+    code = code.replace(/\s*```$/m, "");
+  
+    // Trim whitespace
+    code = code.trim();
+  
+    return code;
+  }
+  
 /**
  * Validate render function for security
  */

@@ -5,13 +5,17 @@
 import { createGeminiClient } from "./gemini-client.js";
 import { manifestToGemini } from "../api-client/manifest.transform.js";
 import { ApiClient } from "../api-client/api-client.js";
-import { executeToolCalls } from "./tool-executor.js";
+import { executeSiteAPI, executeRender } from "./tool-executor.js";
 import { SYSTEM_INSTRUCTION } from "./system-instruction.js";
 import type {
   OrchestratorConfig,
   OrchestratorCallbacks,
   FunctionCall,
+  RenderFunctionCall,
+  RenderToolResponse,
   UserAction,
+  FunctionResponse,
+  OrchestrateResult,
 } from "./types.js";
 import type { Candidate, Part } from "@google/genai";
 
@@ -71,10 +75,32 @@ function extractText(candidate: Candidate): string | null {
 }
 
 /**
+ * Type guard to check if a function call is a render call
+ * Also validates and casts the args to RenderToolParams
+ */
+function isRenderFunctionCall(call: FunctionCall): call is RenderFunctionCall {
+  if (call.name !== "render") {
+    return false;
+  }
+  // Validate that args match RenderToolParams structure
+  const args = call.args;
+  return (
+    typeof args === "object" &&
+    args !== null &&
+    "dataStructure" in args &&
+    "data" in args &&
+    "mainGoal" in args &&
+    "subGoal" in args &&
+    "stepType" in args &&
+    "actions" in args
+  );
+}
+
+/**
  * Check if render call requires user action
  */
-function requiresUserAction(renderArgs: Record<string, unknown>): boolean {
-  const actions = renderArgs["actions"] as Array<{ continues: boolean }> | undefined;
+function requiresUserAction(renderCall: RenderFunctionCall): boolean {
+  const actions = renderCall.args.actions;
   if (!actions) {
     return false;
   }
@@ -84,13 +110,235 @@ function requiresUserAction(renderArgs: Record<string, unknown>): boolean {
 }
 
 /**
- * Main orchestration function
+ * Execute render function and return HTML
  */
-export async function orchestrate(
+function executeRenderFunction(
+  renderCode: string,
+  renderData: Record<string, unknown>,
+  handleUserAction: (action: UserAction) => void
+): string {
+  const renderFn = new Function(
+    "data",
+    "onAction",
+    renderCode + "; return render(data, onAction);"
+  );
+
+  return renderFn(renderData, handleUserAction);
+}
+
+/**
+ * Process render with user action handling
+ * Returns true if task is completed, false otherwise
+ */
+async function processRenderWithUserAction(
+  renderCall: RenderFunctionCall,
+  renderCode: string,
+  callbacks: OrchestratorCallbacks | undefined,
+  isAborted: () => boolean,
+  setPendingUserAction: (promise: {
+    promise: Promise<UserAction>;
+    resolve: (action: UserAction) => void;
+    reject: (error: Error) => void;
+  }) => void,
+  handleUserAction: (action: UserAction) => void,
+  geminiClient: ReturnType<typeof createGeminiClient>
+): Promise<boolean> {
+  if (isAborted()) {
+    throw new Error("Workflow aborted");
+  }
+
+  const renderData = renderCall.args.data;
+  // Execute and display render
+  const html = executeRenderFunction(renderCode, renderData, handleUserAction);
+  if (callbacks?.onUI) {
+    callbacks.onUI(html);
+  }
+
+  // Check if task is completed
+  if (renderCall.args.taskCompleted === true) {
+    // Final render, no user action needed
+    return true; // Task completed
+  }
+
+  // If requires user action, wait for it
+  if (requiresUserAction(renderCall)) {
+    let resolve: (action: UserAction) => void;
+    let reject: (error: Error) => void;
+
+    const actionPromise = new Promise<UserAction>((res, rej) => {
+      resolve = res;
+      reject = rej;
+    });
+
+    setPendingUserAction({ promise: actionPromise, resolve: resolve!, reject: reject! });
+
+    try {
+      const userAction = await actionPromise;
+
+      if (isAborted()) {
+        throw new Error("Workflow aborted");
+      }
+
+      // Send structured user action response matching RenderToolResponse schema
+      const userActionResponse: RenderToolResponse = {
+        type: "userAction",
+        actionId: userAction.actionId,
+        ...(userAction.payload && { payload: userAction.payload }),
+      };
+
+      // Add structured user action to conversation as JSON
+      await geminiClient.generateContent([
+        {
+          role: "user",
+          parts: [
+            {
+              text: JSON.stringify(userActionResponse),
+            },
+          ],
+        },
+      ]);
+    } catch (error) {
+      // Aborted or cancelled
+      throw error;
+    }
+  }
+
+  return false; // Task not completed
+}
+
+/**
+ * Execute function calls in order: parallel normals + serial renders
+ * Returns responses in original order
+ */
+async function executeFunctionCallsInOrder(
+  functionCalls: FunctionCall[],
+  apiClient: ApiClient,
+  renderGeminiClient: ReturnType<typeof createGeminiClient>,
+  callbacks: OrchestratorCallbacks | undefined,
+  isAborted: () => boolean,
+  setPendingUserAction: (promise: {
+    promise: Promise<UserAction>;
+    resolve: (action: UserAction) => void;
+    reject: (error: Error) => void;
+  }) => void,
+  handleUserAction: (action: UserAction) => void,
+  geminiClient: ReturnType<typeof createGeminiClient>
+): Promise<FunctionResponse[]> {
+  // Index each call to preserve order
+  const indexedCalls = functionCalls.map((call, index) => ({ call, index }));
+
+  // Separate renders from normals
+  const normalCalls: Array<{ call: FunctionCall; index: number }> = [];
+  const renderCalls: Array<{ call: RenderFunctionCall; index: number }> = [];
+
+  indexedCalls.forEach(({ call, index }) => {
+    if (isRenderFunctionCall(call)) {
+      renderCalls.push({ call, index });
+    } else {
+      normalCalls.push({ call, index });
+    }
+  });
+
+  // Execute normal calls in parallel
+  const normalPromises = normalCalls.map(async ({ call, index }) => {
+    if (isAborted()) {
+      throw new Error("Workflow aborted");
+    }
+    const response = await executeSiteAPI(call, apiClient);
+    return { index, response };
+  });
+
+  // Execute render chain serially
+  const renderResults: Array<{ index: number; response: FunctionResponse }> = [];
+  let taskCompleted = false;
+  
+  for (const { call, index } of renderCalls) {
+    if (isAborted()) {
+      throw new Error("Workflow aborted");
+    }
+
+    // Execute render with retry logic
+    let renderCode: string;
+    try {
+      const renderResponse = await executeRender(call, renderGeminiClient);
+      renderCode = renderResponse.response as string;
+    } catch (error) {
+      // Show retry dialog
+      if (callbacks?.onRenderRetry) {
+        const shouldRetry = await callbacks.onRenderRetry(
+          error instanceof Error ? error : new Error(String(error)),
+          call
+        );
+        if (!shouldRetry) {
+          throw new Error("Render cancelled by user");
+        }
+        // Retry
+        const retryResponse = await executeRender(call, renderGeminiClient);
+        renderCode = retryResponse.response as string;
+      } else {
+        throw error;
+      }
+    }
+
+    // Process render with user action handling
+    const isTaskCompleted = await processRenderWithUserAction(
+      call,
+      renderCode,
+      callbacks,
+      isAborted,
+      setPendingUserAction,
+      handleUserAction,
+      geminiClient
+    );
+
+    renderResults.push({ index, response: { name: "render", response: renderCode } });
+
+    // Track if any render completed the task
+    if (isTaskCompleted) {
+      taskCompleted = true;
+    }
+  }
+
+  // Wait for all normal calls
+  const normalResults = await Promise.all(normalPromises);
+
+  // Combine all results
+  const allResults = [...normalResults, ...renderResults];
+
+  // Create response map
+  const responseMap = new Map<number, FunctionResponse>();
+  allResults.forEach(({ index, response }) => {
+    responseMap.set(index, response);
+  });
+
+  // Return in original order
+  const orderedResponses = functionCalls.map((_, index) => {
+    const response = responseMap.get(index);
+    if (!response) {
+      throw new Error(`Missing response for function call at index ${index}`);
+    }
+    return response;
+  });
+
+  // If task was completed, throw special error to signal completion
+  if (taskCompleted) {
+    const completionError = new Error("TASK_COMPLETED");
+    (completionError as any).responses = orderedResponses;
+    throw completionError;
+  }
+
+  return orderedResponses;
+}
+
+/**
+ * Main orchestration function
+ * Returns abort function immediately, orchestration runs in background
+ */
+export function orchestrate(
   userInput: string,
   config: OrchestratorConfig,
   callbacks?: OrchestratorCallbacks
-): Promise<void> {
+): OrchestrateResult {
   const { apiKey, manifest, apiBaseUrl } = config;
 
   // Build tools from manifest
@@ -119,23 +367,69 @@ export async function orchestrate(
   });
 
   let continueLoop = true;
-  let pendingUserAction: Promise<UserAction> | null = null;
-  let userActionResolve: ((action: UserAction) => void) | null = null;
+  let aborted = false;
+  let abortReason: Error | null = null;
+  let pendingUserAction: {
+    promise: Promise<UserAction>;
+    resolve: (action: UserAction) => void;
+    reject: (error: Error) => void;
+  } | null = null;
   let isFirstCall = true;
+
+  // Abort check function
+  const isAborted = () => aborted;
+
+  // Set pending user action
+  const setPendingUserAction = (promise: {
+    promise: Promise<UserAction>;
+    resolve: (action: UserAction) => void;
+    reject: (error: Error) => void;
+  }) => {
+    pendingUserAction = promise;
+  };
 
   // Create user action handler
   const handleUserAction = (action: UserAction) => {
-    if (userActionResolve) {
-      userActionResolve(action);
-      userActionResolve = null;
+    if (pendingUserAction) {
+      pendingUserAction.resolve(action);
+      pendingUserAction = null;
     }
     if (callbacks?.onUserAction) {
       callbacks.onUserAction(action);
     }
   };
 
-  while (continueLoop) {
+  // Abort function - available immediately
+  const abort = () => {
+    aborted = true;
+    abortReason = new Error("Workflow aborted by user");
+    continueLoop = false;
+
+    // Reject pending user action
+    if (pendingUserAction) {
+      pendingUserAction.reject(abortReason);
+      pendingUserAction = null;
+    }
+
+    // Clear UI
+    if (callbacks?.onUI) {
+      callbacks.onUI(""); // Clear render UI
+    }
+    if (callbacks?.onThinking) {
+      callbacks.onThinking(""); // Clear thinking
+    }
+  };
+
+  // Start orchestration in background (don't await)
+  (async () => {
+
+  while (continueLoop && !aborted) {
     try {
+      // Check abort before each major operation
+      if (aborted) {
+        break;
+      }
+
       // Generate content with Gemini
       // First iteration: send initial user message
       // Subsequent iterations: send empty array to continue conversation
@@ -150,6 +444,10 @@ export async function orchestrate(
           : []
       );
       isFirstCall = false;
+
+      if (aborted) {
+        break;
+      }
 
       const candidate = response.candidates?.[0];
       if (!candidate) {
@@ -179,108 +477,52 @@ export async function orchestrate(
         break;
       }
 
-      // Execute function calls (in parallel where possible)
-      const functionResponses = await executeToolCalls(functionCalls, apiClient, renderGeminiClient);
-
-      // Process render tool calls
-      for (const fc of functionCalls) {
-        if (fc.name === "render") {
-          const renderResponse = functionResponses.find((r) => r.name === "render");
-          if (renderResponse && typeof renderResponse.response === "string") {
-            const renderCode = renderResponse.response;
-
-            // Get data directly from render tool call args
-            const renderData = (fc.args["data"] as Record<string, unknown>) || {};
-
-            // Check if task is completed (top-level parameter)
-            if (fc.args["taskCompleted"] === true) {
-              // Task is complete, end the conversation after rendering
-              try {
-                // Create render function in safe context
-                const renderFn = new Function(
-                  "data",
-                  "onAction",
-                  renderCode + "; return render(data, onAction);"
-                );
-
-                // Display UI
-                const html = renderFn(renderData, (actionId: string, payload?: Record<string, unknown>) => {
-                  handleUserAction(payload ? { actionId, payload } : { actionId });
-                });
-
-                if (callbacks?.onUI) {
-                  callbacks.onUI(html);
-                }
-
-                // End the conversation
-                continueLoop = false;
-                break;
-              } catch (error) {
-                if (callbacks?.onError) {
-                  callbacks.onError(
-                    error instanceof Error ? error : new Error(String(error))
-                  );
-                }
-                continueLoop = false;
-                break;
-              }
-            }
-
-            // Execute render function with real data
-            try {
-              // Create render function in safe context
-              const renderFn = new Function(
-                "data",
-                "onAction",
-                renderCode + "; return render(data, onAction);"
-              );
-
-              // Display UI
-              const html = renderFn(renderData, (actionId: string, payload?: Record<string, unknown>) => {
-                handleUserAction(payload ? { actionId, payload } : { actionId });
-              });
-
-              if (callbacks?.onUI) {
-                callbacks.onUI(html);
-              }
-
-              // If action requires user input, wait for it
-              if (requiresUserAction(fc.args)) {
-                pendingUserAction = new Promise<UserAction>((resolve) => {
-                  userActionResolve = resolve;
-                });
-
-                const userAction = await pendingUserAction;
-                pendingUserAction = null;
-
-                // Add user action to conversation and continue
-                await geminiClient.generateContent([
-                  {
-                    role: "user",
-                    parts: [
-                      {
-                        text: `User action: ${userAction.actionId}${userAction.payload ? ` with payload: ${JSON.stringify(userAction.payload)}` : ""}`,
-                      },
-                    ],
+      // Execute function calls with parallel normals + serial renders
+      let functionResponses: FunctionResponse[];
+      try {
+        functionResponses = await executeFunctionCallsInOrder(
+          functionCalls,
+          apiClient,
+          renderGeminiClient,
+          callbacks,
+          isAborted,
+          setPendingUserAction,
+          handleUserAction,
+          geminiClient
+        );
+      } catch (error) {
+        // Check if this is a task completion signal
+        if (error instanceof Error && error.message === "TASK_COMPLETED") {
+          // Extract responses from error if available
+          functionResponses = (error as any).responses || [];
+          // Send responses back to model before stopping
+          if (functionResponses.length > 0) {
+            await geminiClient.generateContent([
+              {
+                role: "user",
+                parts: functionResponses.map((fr) => ({
+                  functionResponse: {
+                    name: fr.name,
+                    response: fr.response as Record<string, unknown>,
                   },
-                ]);
-
-                // Continue loop to process user action
-                continue;
-              }
-            } catch (error) {
-              if (callbacks?.onError) {
-                callbacks.onError(
-                  error instanceof Error ? error : new Error(String(error))
-                );
-              }
-            }
+                })),
+              },
+            ]);
           }
+          continueLoop = false;
+          break;
         }
+        throw error;
+      }
+
+      if (aborted) {
+        break;
       }
 
       // Add function responses to conversation and get next model response
-      const functionResponseContent = await geminiClient.generateContent([
+      // Responses are already in the correct order
+      // @TODO: This is not correct, we need to add the function responses to the conversation in the correct order one by one after the original function call itself.
+      await geminiClient.generateContent([
         {
           role: "user",
           parts: functionResponses.map((fr) => ({
@@ -292,144 +534,13 @@ export async function orchestrate(
         },
       ]);
 
-      // Process the response from function responses
-      const functionResponseCandidate = functionResponseContent.candidates?.[0];
-      if (!functionResponseCandidate) {
-        continueLoop = false;
-        break;
-      }
-
-      // Extract and display thinking from function response
-      const functionResponseThinking = extractThinking(functionResponseCandidate);
-      if (functionResponseThinking) {
-        if (callbacks?.onThinking) {
-          callbacks.onThinking(functionResponseThinking);
-        }
-      }
-
-      // Extract function calls from function response
-      const nextFunctionCalls = extractFunctionCalls(functionResponseCandidate);
-
-      if (nextFunctionCalls.length === 0) {
-        // No more function calls, show final response
-        const text = extractText(functionResponseCandidate);
-        if (text) {
-          if (callbacks?.onResponse) {
-            callbacks.onResponse(text);
-          }
-        }
-        continueLoop = false;
-        break;
-      }
-
-      // Process next function calls inline (similar to first set)
-      const nextFunctionResponses = await executeToolCalls(nextFunctionCalls, apiClient, renderGeminiClient);
-
-      // Process render tool calls from next set
-      for (const fc of nextFunctionCalls) {
-        if (fc.name === "render") {
-          const renderResponse = nextFunctionResponses.find((r) => r.name === "render");
-          if (renderResponse && typeof renderResponse.response === "string") {
-            const renderCode = renderResponse.response;
-            // Get data directly from render tool call args
-            const renderData = (fc.args["data"] as Record<string, unknown>) || {};
-
-            // Check if task is completed (top-level parameter)
-            if (fc.args["taskCompleted"] === true) {
-              // Task is complete, end the conversation after rendering
-              try {
-                const renderFn = new Function(
-                  "data",
-                  "onAction",
-                  renderCode + "; return render(data, onAction);"
-                );
-
-                const html = renderFn(renderData, (actionId: string, payload?: Record<string, unknown>) => {
-                  handleUserAction(payload ? { actionId, payload } : { actionId });
-                });
-
-                if (callbacks?.onUI) {
-                  callbacks.onUI(html);
-                }
-
-                // End the conversation
-                continueLoop = false;
-                break;
-              } catch (error) {
-                if (callbacks?.onError) {
-                  callbacks.onError(
-                    error instanceof Error ? error : new Error(String(error))
-                  );
-                }
-                continueLoop = false;
-                break;
-              }
-            }
-
-            try {
-              const renderFn = new Function(
-                "data",
-                "onAction",
-                renderCode + "; return render(data, onAction);"
-              );
-
-              const html = renderFn(renderData, (actionId: string, payload?: Record<string, unknown>) => {
-                handleUserAction(payload ? { actionId, payload } : { actionId });
-              });
-
-              if (callbacks?.onUI) {
-                callbacks.onUI(html);
-              }
-
-              if (requiresUserAction(fc.args)) {
-                pendingUserAction = new Promise<UserAction>((resolve) => {
-                  userActionResolve = resolve;
-                });
-
-                const userAction = await pendingUserAction;
-                pendingUserAction = null;
-
-                await geminiClient.generateContent([
-                  {
-                    role: "user",
-                    parts: [
-                      {
-                        text: `User action: ${userAction.actionId}${userAction.payload ? ` with payload: ${JSON.stringify(userAction.payload)}` : ""}`,
-                      },
-                    ],
-                  },
-                ]);
-
-                continue;
-              }
-            } catch (error) {
-              if (callbacks?.onError) {
-                callbacks.onError(
-                  error instanceof Error ? error : new Error(String(error))
-                );
-              }
-            }
-          }
-        }
-      }
-
-      // Add next function responses and continue the loop
-      // The loop will handle getting the next response
-      await geminiClient.generateContent([
-        {
-          role: "user",
-          parts: nextFunctionResponses.map((fr) => ({
-            functionResponse: {
-              name: fr.name,
-              response: fr.response as Record<string, unknown>,
-            },
-          })),
-        },
-      ]);
-
       // Continue loop to get next response
       continue;
     } catch (error) {
+      if (aborted && abortReason) {
+        // Abort was intentional, exit cleanly
+        break;
+      }
       if (callbacks?.onError) {
         callbacks.onError(error instanceof Error ? error : new Error(String(error)));
       }
@@ -437,5 +548,18 @@ export async function orchestrate(
       break;
     }
   }
+  })().catch((error) => {
+    if (!aborted && callbacks?.onError) {
+      callbacks.onError(error instanceof Error ? error : new Error(String(error)));
+    }
+  }).finally(() => {
+    // Call completion callback if not aborted
+    if (!aborted && callbacks?.onComplete) {
+      callbacks.onComplete();
+    }
+  });
+
+  // Return abort function immediately
+  return { abort };
 }
 

@@ -13,6 +13,7 @@ export async function initBrowserOrchestrator() {
     // Get DOM elements
     const userInput = document.getElementById("userInput") as HTMLInputElement;
     const submitBtn = document.getElementById("submitBtn") as HTMLButtonElement;
+    const cancelBtn = document.getElementById("cancelBtn") as HTMLButtonElement;
     const thinkingContainer = document.getElementById("thinkingContainer") as HTMLDivElement;
     const thinkingContent = document.getElementById("thinkingContent") as HTMLDivElement;
     const uiContainer = document.getElementById("uiContainer") as HTMLDivElement;
@@ -30,15 +31,28 @@ export async function initBrowserOrchestrator() {
       errorContainer.classList.add("hidden");
     };
 
+    // Abort function reference
+    let currentAbort: (() => void) | null = null;
+
     // Setup callbacks
     const callbacks: OrchestratorCallbacks = {
       onThinking: (thinking: string) => {
-        thinkingContainer.classList.remove("hidden");
-        thinkingContent.textContent = thinking;
+        if (thinking) {
+          thinkingContainer.classList.remove("hidden");
+          thinkingContent.textContent = thinking;
+        } else {
+          thinkingContainer.classList.add("hidden");
+          thinkingContent.textContent = "";
+        }
       },
       onUI: (html: string) => {
-        uiContainer.classList.remove("hidden");
-        uiContainer.innerHTML = html;
+        if (html) {
+          uiContainer.classList.remove("hidden");
+          uiContainer.innerHTML = html;
+        } else {
+          uiContainer.classList.add("hidden");
+          uiContainer.innerHTML = "";
+        }
       },
       onResponse: (text: string) => {
         responseContainer.classList.remove("hidden");
@@ -53,6 +67,23 @@ export async function initBrowserOrchestrator() {
         // This callback is for logging/debugging
         console.log("User action:", action);
         // The orchestrator will continue processing after user action
+      },
+      onRenderRetry: async (error: Error, _renderCall: any) => {
+        // Show retry dialog
+        const message = `${error.message}\n\nWould you like to retry rendering?`;
+        const shouldRetry = window.confirm(message);
+        return shouldRetry;
+      },
+      onComplete: () => {
+        // Re-enable submit button, disable cancel button when orchestration completes
+        submitBtn.disabled = false;
+        userInput.disabled = false;
+        if (cancelBtn) {
+          cancelBtn.disabled = true;
+          cancelBtn.classList.add("hidden");
+        }
+        currentAbort = null;
+        userInput.focus();
       },
     };
 
@@ -81,24 +112,44 @@ export async function initBrowserOrchestrator() {
       // Initialize orchestrator with current API key
       const orchestrator = await initOrchestrator(currentApiKey, "/api/v1/", callbacks);
 
-      // Disable submit button
+      // Disable submit button, enable cancel button
       submitBtn.disabled = true;
       userInput.disabled = true;
+      if (cancelBtn) {
+        cancelBtn.disabled = false;
+        cancelBtn.classList.remove("hidden");
+      }
 
       // Clear previous display
       clearDisplay();
 
-      try {
-        await orchestrator.execute(input);
-      } catch (error) {
-        if (callbacks.onError) {
-          callbacks.onError(error instanceof Error ? error : new Error(String(error)));
+      // Execute orchestration (returns abort function immediately)
+      const result = orchestrator.execute(input);
+      currentAbort = result.abort;
+
+      // Note: Orchestration runs in background, we don't await it
+      // The abort function is available immediately
+    };
+
+    // Setup cancel handler
+    const handleCancel = () => {
+      if (currentAbort) {
+        // Show confirmation dialog
+        if (window.confirm("Are you sure you want to cancel the current workflow?")) {
+          currentAbort();
+          currentAbort = null;
+          
+          // Clear UI
+          clearDisplay();
+          
+          // Re-enable submit button, disable cancel button
+          submitBtn.disabled = false;
+          userInput.disabled = false;
+          if (cancelBtn) {
+            cancelBtn.disabled = true;
+            cancelBtn.classList.add("hidden");
+          }
         }
-      } finally {
-        // Re-enable submit button
-        submitBtn.disabled = false;
-        userInput.disabled = false;
-        userInput.focus();
       }
     };
 
@@ -108,6 +159,14 @@ export async function initBrowserOrchestrator() {
         handleSubmit();
       }
     });
+
+    // Setup cancel button
+    if (cancelBtn) {
+      cancelBtn.addEventListener("click", handleCancel);
+      // Initially hidden and disabled
+      cancelBtn.disabled = true;
+      cancelBtn.classList.add("hidden");
+    }
 
     // Focus input on load
     userInput.focus();

@@ -3,9 +3,8 @@
  */
 
 import { ApiClient } from "../api-client/api-client.js";
-import type { FunctionCall, FunctionResponse } from "./types.js";
+import type { FunctionCall, RenderFunctionCall, FunctionResponse } from "./types.js";
 import { executeRenderTool, type RenderGeminiClient } from "./render-executor.js";
-import type { RenderToolParams } from "./types.js";
 import type { ListTodosQuery } from "../models/api-model.js";
 
 /**
@@ -132,35 +131,14 @@ export async function executeSiteAPI(
  * Execute render tool (delegates to render executor)
  */
 export async function executeRender(
-  functionCall: FunctionCall,
+  functionCall: RenderFunctionCall,
   geminiClient: RenderGeminiClient
 ): Promise<FunctionResponse> {
-  const params = functionCall.args as unknown as RenderToolParams;
-  const renderCode = await executeRenderTool(params, geminiClient);
+  const renderCode = await executeRenderTool(functionCall.args, geminiClient);
   return {
     name: "render",
     response: renderCode,
   };
 }
 
-/**
- * Execute multiple tool calls in parallel where possible
- */
-export async function executeToolCalls(
-  functionCalls: FunctionCall[],
-  apiClient: ApiClient,
-  renderGeminiClient: RenderGeminiClient
-): Promise<FunctionResponse[]> {
-  // Separate render calls from API calls
-  const renderCalls = functionCalls.filter((fc) => fc.name === "render");
-  const apiCalls = functionCalls.filter((fc) => fc.name !== "render");
-
-  // Execute in parallel
-  const results = await Promise.all([
-    ...apiCalls.map((fc) => executeSiteAPI(fc, apiClient)),
-    ...renderCalls.map((fc) => executeRender(fc, renderGeminiClient)),
-  ]);
-
-  return results;
-}
 
