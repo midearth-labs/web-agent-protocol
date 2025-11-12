@@ -3,6 +3,9 @@
  */
 
 import type { WAPManifest } from "../api-client/manifest.type.js";
+import type { FunctionCall  } from "@google/genai";
+export type { FunctionCall  } from "@google/genai";
+export type { FunctionResponse  } from "@google/genai";
 
 /**
  * Configuration for the orchestrator
@@ -14,27 +17,11 @@ export type OrchestratorConfig = {
 }
 
 /**
- * Function call from Gemini
- */
-export type FunctionCall = {
-  name: string;
-  args: Record<string, unknown>;
-}
-
-/**
  * Render function call with typed arguments matching render tool structure
  */
 export type RenderFunctionCall = FunctionCall & {
   name: "render";
   args: RenderToolParams;
-}
-
-/**
- * Function response to send back to Gemini
- */
-export type FunctionResponse = {
-  name: string;
-  response: unknown;
 }
 
 /**

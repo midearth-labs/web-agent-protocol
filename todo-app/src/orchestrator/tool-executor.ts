@@ -14,10 +14,14 @@ export async function executeSiteAPI(
   functionCall: FunctionCall,
   apiClient: ApiClient
 ): Promise<FunctionResponse> {
-  const { name, args } = functionCall;
+  const { name, args: argsOrUndefined } = functionCall;
+  if (name === undefined) {
+    throw new Error("Function call name is undefined. This should not happen.");
+  }
+  const args = argsOrUndefined as Record<string, unknown>;
 
   try {
-    let result: unknown;
+    let result: Record<string, unknown>;
 
     // Map tool names to ApiClient methods and translate arguments
     switch (name) {
@@ -79,11 +83,12 @@ export async function executeSiteAPI(
 
       case "deleteTodo": {
         // Params: id
-        result = await apiClient.deleteTodo({
+        await apiClient.deleteTodo({
           params: {
             id: args["id"] as string,
           },
         });
+        result = {};
         break;
       }
 
@@ -100,11 +105,12 @@ export async function executeSiteAPI(
 
       case "bulkDelete": {
         // Body: ids
-        result = await apiClient.bulkDelete({
+        await apiClient.bulkDelete({
           body: {
             ids: args["ids"] as string[],
           },
         });
+        result = {};
         break;
       }
 
@@ -133,12 +139,8 @@ export async function executeSiteAPI(
 export async function executeRender(
   functionCall: RenderFunctionCall,
   geminiClient: RenderGeminiClient
-): Promise<FunctionResponse> {
-  const renderCode = await executeRenderTool(functionCall.args, geminiClient);
-  return {
-    name: "render",
-    response: renderCode,
-  };
+): Promise<string> {
+  return await executeRenderTool(functionCall.args, geminiClient);
 }
 
 

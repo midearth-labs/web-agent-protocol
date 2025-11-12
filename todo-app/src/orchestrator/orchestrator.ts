@@ -17,7 +17,7 @@ import type {
   FunctionResponse,
   OrchestrateResult,
 } from "./types.js";
-import type { Candidate, Part } from "@google/genai";
+import type { Candidate, Content, Part } from "@google/genai";
 
 /**
  * Extract thinking from Gemini candidate
@@ -51,10 +51,7 @@ function extractFunctionCalls(candidate: Candidate): FunctionCall[] {
 
   for (const part of parts) {
     if (part.functionCall) {
-      functionCalls.push({
-        name: part.functionCall.name || "",
-        args: part.functionCall.args || {},
-      });
+      functionCalls.push(part.functionCall);
     }
   }
 
@@ -140,9 +137,8 @@ async function processRenderWithUserAction(
     resolve: (action: UserAction) => void;
     reject: (error: Error) => void;
   }) => void,
-  handleUserAction: (action: UserAction) => void,
-  geminiClient: ReturnType<typeof createGeminiClient>
-): Promise<boolean> {
+  handleUserAction: (action: UserAction) => void
+): Promise<boolean | RenderToolResponse> {
   if (isAborted()) {
     throw new Error("Workflow aborted");
   }
@@ -180,23 +176,11 @@ async function processRenderWithUserAction(
       }
 
       // Send structured user action response matching RenderToolResponse schema
-      const userActionResponse: RenderToolResponse = {
+      return {
         type: "userAction",
         actionId: userAction.actionId,
         ...(userAction.payload && { payload: userAction.payload }),
-      };
-
-      // Add structured user action to conversation as JSON
-      await geminiClient.generateContent([
-        {
-          role: "user",
-          parts: [
-            {
-              text: JSON.stringify(userActionResponse),
-            },
-          ],
-        },
-      ]);
+      } satisfies RenderToolResponse;
     } catch (error) {
       // Aborted or cancelled
       throw error;
@@ -221,8 +205,7 @@ async function executeFunctionCallsInOrder(
     resolve: (action: UserAction) => void;
     reject: (error: Error) => void;
   }) => void,
-  handleUserAction: (action: UserAction) => void,
-  geminiClient: ReturnType<typeof createGeminiClient>
+  handleUserAction: (action: UserAction) => void
 ): Promise<FunctionResponse[]> {
   // Index each call to preserve order
   const indexedCalls = functionCalls.map((call, index) => ({ call, index }));
@@ -260,8 +243,7 @@ async function executeFunctionCallsInOrder(
     // Execute render with retry logic
     let renderCode: string;
     try {
-      const renderResponse = await executeRender(call, renderGeminiClient);
-      renderCode = renderResponse.response as string;
+      renderCode = await executeRender(call, renderGeminiClient);
     } catch (error) {
       // Show retry dialog
       if (callbacks?.onRenderRetry) {
@@ -273,29 +255,29 @@ async function executeFunctionCallsInOrder(
           throw new Error("Render cancelled by user");
         }
         // Retry
-        const retryResponse = await executeRender(call, renderGeminiClient);
-        renderCode = retryResponse.response as string;
+        renderCode = await executeRender(call, renderGeminiClient);
       } else {
         throw error;
       }
     }
 
     // Process render with user action handling
-    const isTaskCompleted = await processRenderWithUserAction(
+    const result = await processRenderWithUserAction(
       call,
       renderCode,
       callbacks,
       isAborted,
       setPendingUserAction,
-      handleUserAction,
-      geminiClient
+      handleUserAction
     );
 
-    renderResults.push({ index, response: { name: "render", response: renderCode } });
-
-    // Track if any render completed the task
-    if (isTaskCompleted) {
-      taskCompleted = true;
+    if (typeof result === "boolean") {
+      if (result) {
+        taskCompleted = true;
+        renderResults.push({ index, response: { name: "render", response: {} } });
+      }
+    } else {
+      renderResults.push({ index, response: { name: "render", response: result } });
     }
   }
 
@@ -374,7 +356,6 @@ export function orchestrate(
     resolve: (action: UserAction) => void;
     reject: (error: Error) => void;
   } | null = null;
-  let isFirstCall = true;
 
   // Abort check function
   const isAborted = () => aborted;
@@ -423,8 +404,18 @@ export function orchestrate(
   // Start orchestration in background (don't await)
   (async () => {
 
+  let nextConversation: Content[] = [
+    {
+      role: "user",
+      parts: [{ text: userInput }],
+    },
+  ];
+
   while (continueLoop && !aborted) {
     try {
+      if (nextConversation.length == 0) {
+        throw new Error("No conversation to generate content. This should not happen.");
+      }
       // Check abort before each major operation
       if (aborted) {
         break;
@@ -433,17 +424,8 @@ export function orchestrate(
       // Generate content with Gemini
       // First iteration: send initial user message
       // Subsequent iterations: send empty array to continue conversation
-      const response = await geminiClient.generateContent(
-        isFirstCall
-          ? [
-              {
-                role: "user",
-                parts: [{ text: userInput }],
-              },
-            ]
-          : []
-      );
-      isFirstCall = false;
+      const response = await geminiClient.generateContent(nextConversation);
+      nextConversation = [];
 
       if (aborted) {
         break;
@@ -487,17 +469,17 @@ export function orchestrate(
           callbacks,
           isAborted,
           setPendingUserAction,
-          handleUserAction,
-          geminiClient
+          handleUserAction
         );
       } catch (error) {
         // Check if this is a task completion signal
         if (error instanceof Error && error.message === "TASK_COMPLETED") {
+          /*
           // Extract responses from error if available
           functionResponses = (error as any).responses || [];
           // Send responses back to model before stopping
           if (functionResponses.length > 0) {
-            await geminiClient.generateContent([
+            await geminiClient . generateContent([
               {
                 role: "user",
                 parts: functionResponses.map((fr) => ({
@@ -509,6 +491,7 @@ export function orchestrate(
               },
             ]);
           }
+          */
           continueLoop = false;
           break;
         }
@@ -519,21 +502,22 @@ export function orchestrate(
         break;
       }
 
-      // Add function responses to conversation and get next model response
-      // Responses are already in the correct order
-      // @TODO: This is not correct, we need to add the function responses to the conversation in the correct order one by one after the original function call itself.
-      await geminiClient.generateContent([
-        {
+      // Populate nextConversation with model's function calls and function responses
+      // Following Gemini API pattern: add model's function call, then user's function response
+      functionCalls.forEach((functionCall, index) => {
+        nextConversation.push({
+          role: "model",
+          parts: [{ functionCall: functionCall }],
+        });
+        nextConversation.push({
           role: "user",
-          parts: functionResponses.map((fr) => ({
-            functionResponse: {
-              name: fr.name,
-              response: fr.response as Record<string, unknown>,
+          parts: [
+            {
+              functionResponse: functionResponses[index]!,
             },
-          })),
-        },
-      ]);
-
+          ],
+        })
+      });
       // Continue loop to get next response
       continue;
     } catch (error) {
