@@ -52,7 +52,7 @@ export function createGeminiClient(
     ...(options.tools && { tools: options.tools }),
     toolConfig: {
       functionCallingConfig: {
-        mode: FunctionCallingConfigMode.AUTO,
+        mode: FunctionCallingConfigMode.ANY,
       },
     },
     temperature: 0.2,

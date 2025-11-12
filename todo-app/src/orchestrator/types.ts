@@ -78,6 +78,7 @@ export type OrchestratorCallbacks = {
  */
 export type RenderToolParams = {
   dataStructures: Record<string, string>;
+  data: Record<string, unknown>; // Actual data to render - keys must match dataStructures
   mainGoal: string;
   subGoal: string;
   stepType: "preview" | "confirm" | "progress" | "result" | "error";
@@ -87,6 +88,7 @@ export type RenderToolParams = {
     variant?: "primary" | "danger" | "secondary" | "success";
     continues: boolean;
   }>;
+  taskCompleted?: boolean; // If true, signals that the task is complete and conversation should end
   metadata?: {
     affectedCount?: number;
     operationType?: string;

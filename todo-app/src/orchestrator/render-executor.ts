@@ -20,7 +20,7 @@ export type RenderGeminiClient = {
  * Build the prompt for render generation
  */
 function buildRenderPrompt(params: RenderToolParams): string {
-  const { dataStructures, mainGoal, subGoal, stepType, actions, metadata } = params;
+  const { dataStructures, mainGoal, subGoal, stepType, actions, metadata, taskCompleted } = params;
 
   const dataStructuresText = Object.entries(dataStructures)
     .map(([name, type]) => `  ${name}: ${type}`)
@@ -39,13 +39,15 @@ function buildRenderPrompt(params: RenderToolParams): string {
         .join("\n")
     : "";
 
+  const taskCompletedText = taskCompleted === true ? "\nTask Completed: true (This is the final completion UI - make it clear the task is done)" : "";
+
   return `You are a UI code generator. Generate a JavaScript function that renders an interactive HTML interface.
 
 # Context
 
 Main Goal: ${mainGoal}
 Sub-Goal: ${subGoal}
-Step Type: ${stepType}
+Step Type: ${stepType}${taskCompletedText}
 ${metadataText ? `\nMetadata:\n${metadataText}` : ""}
 
 # Data Structures
@@ -112,12 +114,14 @@ function render(data, onAction) {
   - Show what was accomplished (count, items)
   - Include next steps if applicable
   - Close/done button
+  - If taskCompleted parameter is true, this is the final completion UI - make it clear the task is done
 
 - **error**: Show error message with details
   - Clear error indication
   - Show error message and details
   - Suggest corrective actions
   - Retry/cancel buttons if applicable
+  - If taskCompleted parameter is true, this is the final error state - make it clear the task has ended
 
 **Styling Guidelines:**
 - Use Tailwind utility classes (bg-*, text-*, p-*, m-*, etc.)

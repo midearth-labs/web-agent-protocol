@@ -71,44 +71,6 @@ function extractText(candidate: Candidate): string | null {
 }
 
 /**
- * Extract render data from function call args and previous responses
- */
-function extractRenderData(
-  renderArgs: Record<string, unknown>,
-  functionResponses: Array<{ name: string; response: unknown }>
-): Record<string, unknown> {
-  const data: Record<string, unknown> = {};
-  const dataStructures = renderArgs["dataStructures"] as Record<string, string> | undefined;
-
-  if (!dataStructures) {
-    return data;
-  }
-
-  // Map data structure names to function response data
-  for (const [varName] of Object.entries(dataStructures)) {
-    // Try to find matching response by name or infer from context
-    // For now, we'll use the first response that matches the expected structure
-    // This is a simplified version - in practice, the LLM should specify which responses to use
-    const matchingResponse = functionResponses.find((fr) => {
-      // Check if response structure matches expected type
-      if (varName === "items" && Array.isArray(fr.response)) {
-        return true;
-      }
-      if (varName === "summary" && typeof fr.response === "object") {
-        return true;
-      }
-      return false;
-    });
-
-    if (matchingResponse) {
-      data[varName] = matchingResponse.response;
-    }
-  }
-
-  return data;
-}
-
-/**
  * Check if render call requires user action
  */
 function requiresUserAction(renderArgs: Record<string, unknown>): boolean {
@@ -227,8 +189,42 @@ export async function orchestrate(
           if (renderResponse && typeof renderResponse.response === "string") {
             const renderCode = renderResponse.response;
 
-            // Extract render data
-            const renderData = extractRenderData(fc.args, functionResponses);
+            // Get data directly from render tool call args
+            const renderData = (fc.args["data"] as Record<string, unknown>) || {};
+
+            // Check if task is completed (top-level parameter)
+            if (fc.args["taskCompleted"] === true) {
+              // Task is complete, end the conversation after rendering
+              try {
+                // Create render function in safe context
+                const renderFn = new Function(
+                  "data",
+                  "onAction",
+                  renderCode + "; return render(data, onAction);"
+                );
+
+                // Display UI
+                const html = renderFn(renderData, (actionId: string, payload?: Record<string, unknown>) => {
+                  handleUserAction(payload ? { actionId, payload } : { actionId });
+                });
+
+                if (callbacks?.onUI) {
+                  callbacks.onUI(html);
+                }
+
+                // End the conversation
+                continueLoop = false;
+                break;
+              } catch (error) {
+                if (callbacks?.onError) {
+                  callbacks.onError(
+                    error instanceof Error ? error : new Error(String(error))
+                  );
+                }
+                continueLoop = false;
+                break;
+              }
+            }
 
             // Execute render function with real data
             try {
@@ -335,7 +331,40 @@ export async function orchestrate(
           const renderResponse = nextFunctionResponses.find((r) => r.name === "render");
           if (renderResponse && typeof renderResponse.response === "string") {
             const renderCode = renderResponse.response;
-            const renderData = extractRenderData(fc.args, nextFunctionResponses);
+            // Get data directly from render tool call args
+            const renderData = (fc.args["data"] as Record<string, unknown>) || {};
+
+            // Check if task is completed (top-level parameter)
+            if (fc.args["taskCompleted"] === true) {
+              // Task is complete, end the conversation after rendering
+              try {
+                const renderFn = new Function(
+                  "data",
+                  "onAction",
+                  renderCode + "; return render(data, onAction);"
+                );
+
+                const html = renderFn(renderData, (actionId: string, payload?: Record<string, unknown>) => {
+                  handleUserAction(payload ? { actionId, payload } : { actionId });
+                });
+
+                if (callbacks?.onUI) {
+                  callbacks.onUI(html);
+                }
+
+                // End the conversation
+                continueLoop = false;
+                break;
+              } catch (error) {
+                if (callbacks?.onError) {
+                  callbacks.onError(
+                    error instanceof Error ? error : new Error(String(error))
+                  );
+                }
+                continueLoop = false;
+                break;
+              }
+            }
 
             try {
               const renderFn = new Function(

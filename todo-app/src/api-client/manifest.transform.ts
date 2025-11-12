@@ -104,7 +104,7 @@ function renderToolForGemini(): GeminiFunctionDeclaration {
   return {
     name: "render",
     description:
-      "Generate dynamic UI render function for displaying substep results. Returns JavaScript code for function render(data, onAction).",
+      "Generate dynamic UI render function for displaying substep results. Returns JavaScript code for function render(data, onAction). You must pass both the data structures (type definitions) and the actual data to render.",
     parameters: {
       type: Type.OBJECT,
       properties: {
@@ -112,6 +112,11 @@ function renderToolForGemini(): GeminiFunctionDeclaration {
           type: Type.OBJECT,
           description:
             "Named TypeScript type definitions as strings. Keys are variable names, values are type definitions. Includes inline descriptive comments."
+        },
+        data: {
+          type: Type.OBJECT,
+          description:
+            "The actual data to render. Keys must match the variable names in dataStructures. This is the data that will be passed to the generated render function."
         },
         mainGoal: { type: Type.STRING, description: "The user's original natural language request" },
         subGoal: { type: Type.STRING, description: "What this specific substep is trying to achieve" },
@@ -134,6 +139,10 @@ function renderToolForGemini(): GeminiFunctionDeclaration {
             required: ["id", "label", "continues"]
           }
         },
+        taskCompleted: {
+          type: Type.BOOLEAN,
+          description: "If true, signals that the task is complete and the conversation should end. Set to true for the final render call when all work is done."
+        },
         metadata: {
           type: Type.OBJECT,
           properties: {
@@ -143,7 +152,7 @@ function renderToolForGemini(): GeminiFunctionDeclaration {
           }
         }
       },
-      required: ["dataStructures", "mainGoal", "subGoal", "stepType", "actions"]
+      required: ["dataStructures", "data", "mainGoal", "subGoal", "stepType", "actions"]
     }
   };
 }
