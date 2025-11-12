@@ -10,9 +10,7 @@ export type FewShotExample = {
 };
 
 export type GeminiToolsBundle = {
-  tools: {
-    functionDeclarations: GeminiFunctionDeclaration[];
-  };
+  tools: GeminiFunctionDeclaration[];
   examples: FewShotExample[];
 };
 
@@ -26,7 +24,7 @@ export function manifestToGemini(manifest: WAPManifest): GeminiToolsBundle {
     RENDER_TOOL_FOR_GEMINI
   ];
   return {
-    tools: { functionDeclarations },
+    tools: functionDeclarations,
     examples: buildFewShots(manifest)
   };
 }
@@ -113,9 +111,9 @@ const RENDER_TOOL_FOR_GEMINI: GeminiFunctionDeclaration = {
             "TypeScript type definitions as a string. Includes inline descriptive comments for each property, even inner properties."
         },
         data: {
-          type: Type.OBJECT,
+          type: Type.STRING,
           description:
-            "The actual data to render. Structure must align with the typescript structure defined in dataStructure. This is the data that will be passed to the generated render function."
+            "The JSON string of the actual data to render. Structure must align with the typescript structure defined in dataStructure. This is the data that will be passed to the generated render function."
         },
         mainGoal: { type: Type.STRING, description: "The user's original natural language request" },
         subGoal: { type: Type.STRING, description: "What this specific substep is trying to achieve" },

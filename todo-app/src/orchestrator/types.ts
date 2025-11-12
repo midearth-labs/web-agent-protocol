@@ -48,6 +48,11 @@ export type ThinkingCallback = (thinking: string) => void;
 export type UICallback = (html: string) => void;
 
 /**
+ * Callback for displaying UI along with user action
+ */
+export type UICallbackWithUserAction = (html: string, onAction: UserActionCallback) => void;
+
+/**
  * Callback for displaying final response
  */
 export type ResponseCallback = (text: string) => void;
@@ -82,6 +87,7 @@ export type CompletionCallback = () => void;
 export type OrchestratorCallbacks = {
   onThinking?: ThinkingCallback;
   onUI?: UICallback;
+  onUIWithUserAction?: UICallbackWithUserAction;
   onResponse?: ResponseCallback;
   onError?: ErrorCallback;
   onUserAction?: UserActionCallback;
@@ -106,7 +112,7 @@ export type OrchestrateResult = {
  */
 export type RenderToolParams = {
   dataStructure: string;
-  data: Record<string, unknown>; // Actual data to render - keys must match dataStructure
+  data: string; // Actual data to render - keys must match dataStructure
   mainGoal: string;
   subGoal: string;
   stepType: "preview" | "confirm" | "progress" | "result" | "error";

@@ -150,6 +150,16 @@ Examples:
 \`\`\`json
 {
   "dataStructure": "interface DeleteConfirm { items: Array<{ id: string; title: string; status: string; }>; count: number; }",
+  "data": {
+    "items": [
+      { "id": "1", "title": "Complete project documentation", "status": "done" },
+      { "id": "2", "title": "Review code changes", "status": "done" },
+      { "id": "3", "title": "Update dependencies", "status": "done" },
+      { "id": "4", "title": "Fix bug in login flow", "status": "done" },
+      { "id": "5", "title": "Write unit tests", "status": "done" }
+    ],
+    "count": 5
+  },
   "mainGoal": "Clean up completed todos",
   "subGoal": "Delete 5 completed todos permanently",
   "stepType": "confirm",
@@ -193,6 +203,25 @@ function render(data, onAction) {
 \`\`\`json
 {
   "dataStructure": "interface TaskResult { success: boolean; message: string; summary: { created: number; updated: number; deleted: number; }; items: Array<{ id: string; title: string; }>; }",
+  "data": {
+    "success": true,
+    "message": "Successfully updated 12 todos with new priorities and statuses",
+    "summary": {
+      "created": 2,
+      "updated": 8,
+      "deleted": 2
+    },
+    "items": [
+      { "id": "1", "title": "Review API documentation" },
+      { "id": "2", "title": "Update user authentication" },
+      { "id": "3", "title": "Fix validation errors" },
+      { "id": "4", "title": "Optimize database queries" },
+      { "id": "5", "title": "Add error handling" },
+      { "id": "6", "title": "Refactor component structure" },
+      { "id": "7", "title": "Update test coverage" },
+      { "id": "8", "title": "Deploy to staging" }
+    ]
+  },
   "mainGoal": "Organize my workspace todos",
   "subGoal": "Bulk update todo priorities and statuses",
   "stepType": "result",
@@ -327,7 +356,7 @@ export async function executeRenderTool(
   }
 
   const text = candidate.content?.parts
-    ?.map((part) => ("text" in part ? part.text : ""))
+    ?.map((part) => (part.text && !part.thought ? part.text : ""))
     .join("") || "";
 
   if (!text) {

@@ -143,11 +143,11 @@ async function processRenderWithUserAction(
     throw new Error("Workflow aborted");
   }
 
-  const renderData = renderCall.args.data;
+  const renderData = JSON.parse(renderCall.args.data || "{}");
   // Execute and display render
   const html = executeRenderFunction(renderCode, renderData, handleUserAction);
-  if (callbacks?.onUI) {
-    callbacks.onUI(html);
+  if (callbacks?.onUIWithUserAction) {
+    callbacks.onUIWithUserAction(html, handleUserAction);
   }
 
   // Check if task is completed
@@ -325,13 +325,22 @@ export function orchestrate(
 
   // Build tools from manifest
   const toolsBundle = manifestToGemini(manifest);
-  const tools = toolsBundle.tools.functionDeclarations;
+  const tools = toolsBundle.tools;
+
+  // Concatenate user journey examples with system instruction
+  const examplesText = toolsBundle.examples.length > 0
+    ? `\n\n# User Journey Examples\n\n${toolsBundle.examples
+        .map((example, index) => `## Example ${index + 1}:\n\nUser: ${example.user}\n\nAssistant: ${example.assistant}`)
+        .join("\n\n")}`
+    : "";
+
+  const systemInstructionWithExamples = SYSTEM_INSTRUCTION + examplesText;
 
   // Initialize clients with system instruction and tools
   const geminiClient = createGeminiClient(
     { apiKey },
     {
-      systemInstruction: SYSTEM_INSTRUCTION,
+      systemInstruction: systemInstructionWithExamples,
       tools: [{ functionDeclarations: tools }],
     }
   );
@@ -345,7 +354,7 @@ export function orchestrate(
   );
   
   const apiClient = new ApiClient({
-    baseUrl: apiBaseUrl || "/api/v1/",
+    baseUrl: apiBaseUrl,
   });
 
   let continueLoop = true;

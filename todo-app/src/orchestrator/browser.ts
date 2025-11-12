@@ -54,6 +54,17 @@ export async function initBrowserOrchestrator() {
           uiContainer.innerHTML = "";
         }
       },
+      onUIWithUserAction: (html, onAction) => {
+        // @TODO: remove this monstrosity
+        (window as any).onAction = onAction;
+        if (html) {
+          uiContainer.classList.remove("hidden");
+          uiContainer.innerHTML = html;
+        } else {
+          uiContainer.classList.add("hidden");
+          uiContainer.innerHTML = "";
+        }
+      },
       onResponse: (text: string) => {
         responseContainer.classList.remove("hidden");
         responseContent.textContent = text;
@@ -61,6 +72,7 @@ export async function initBrowserOrchestrator() {
       onError: (error: Error) => {
         errorContainer.classList.remove("hidden");
         errorContent.textContent = error.message;
+        console.error("Error:", error);
       },
       onUserAction: async (action) => {
         // User action is handled in the orchestrator
@@ -110,7 +122,7 @@ export async function initBrowserOrchestrator() {
       }
 
       // Initialize orchestrator with current API key
-      const orchestrator = await initOrchestrator(currentApiKey, "/api/v1/", callbacks);
+      const orchestrator = await initOrchestrator(currentApiKey, "http://localhost:3000/api/v1/", callbacks);
 
       // Disable submit button, enable cancel button
       submitBtn.disabled = true;

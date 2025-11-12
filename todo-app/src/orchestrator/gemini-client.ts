@@ -39,7 +39,7 @@ export function createGeminiClient(
   options: CreateGeminiClientOptions
 ) {
   const genAI = new GoogleGenAI(config);
-  const modelName = options.model || "gemini-2.0-flash-thinking-exp-01-21";
+  const modelName = options.model || "gemini-flash-latest"; // || "gemini-2.0-flash-thinking-exp-01-21";
 
   // Initialize conversation state
   const conversation: Content[] = [];
@@ -49,18 +49,20 @@ export function createGeminiClient(
     systemInstruction: {
       parts: [{ text: options.systemInstruction }],
     },
-    ...(options.tools && { tools: options.tools }),
-    toolConfig: {
-      functionCallingConfig: {
-        mode: FunctionCallingConfigMode.ANY,
-      },
-    },
+    ...(options.tools && { 
+      tools: options.tools,
+      toolConfig: {
+        functionCallingConfig: {
+          mode: FunctionCallingConfigMode.ANY,
+        },
+      }
+    }),
     temperature: 0.2,
     // maxOutputTokens: 8192,
-    thinkingConfig: {
-      includeThoughts: true,
-      thinkingBudget: -1,
-    },
+    //thinkingConfig: {
+      //includeThoughts: true,
+      //thinkingBudget: -1,
+    //},
   };
 
   return {
