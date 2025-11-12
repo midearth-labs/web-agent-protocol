@@ -23,7 +23,7 @@ export function manifestToGemini(manifest: WAPManifest): GeminiToolsBundle {
   const functionDeclarations: GeminiFunctionDeclaration[] = [
     ...manifest.tools.map(toolToGemini),
     // Inject render meta-tool for orchestration UIs
-    renderToolForGemini()
+    RENDER_TOOL_FOR_GEMINI
   ];
   return {
     tools: { functionDeclarations },
@@ -100,15 +100,14 @@ const WAP_SCHEMA_TYPE_TO_GEMINI_TYPE_MAP: Record<WAPSchemaType, Type> = {
 };
 
 // Render tool (Gemini only)
-function renderToolForGemini(): GeminiFunctionDeclaration {
-  return {
-    name: "render",
-    description:
-      "Generate dynamic UI render function for displaying substep results. Returns JavaScript code for function render(data, onAction). You must pass both the data structures (type definitions) and the actual data to render.",
-    parameters: {
-      type: Type.OBJECT,
-      properties: {
-        dataStructure: {
+const RENDER_TOOL_FOR_GEMINI: GeminiFunctionDeclaration = {
+  name: "render",
+  description:
+    "Generate dynamic UI render function for displaying substep results. Returns JavaScript code for function render(data, onAction). You must pass both the data structures (type definitions) and the actual data to render.",
+  parameters: {
+    type: Type.OBJECT,
+    properties: {
+      dataStructure: {
           type: Type.STRING,
           description:
             "TypeScript type definitions as a string. Includes inline descriptive comments for each property, even inner properties."
@@ -175,7 +174,6 @@ function renderToolForGemini(): GeminiFunctionDeclaration {
       required: ["type", "actionId"]
     }
   };
-}
 
 // Utilities
 function compactText(text: string): string {

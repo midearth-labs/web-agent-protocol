@@ -144,14 +144,105 @@ type RenderFunction = (
 
 Return ONLY the JavaScript function code. Do not include markdown formatting, explanations, or any text outside the function.
 
-Example:
+Examples:
+
+## Example 1: Confirm Step - Bulk Delete Operation
+\`\`\`json
+{
+  "dataStructure": "interface DeleteConfirm { items: Array<{ id: string; title: string; status: string; }>; count: number; }",
+  "mainGoal": "Clean up completed todos",
+  "subGoal": "Delete 5 completed todos permanently",
+  "stepType": "confirm",
+  "actions": [
+    { "id": "confirm-delete", "label": "Yes, Delete Permanently", "variant": "danger", "continues": true },
+    { "id": "cancel", "label": "Cancel", "variant": "secondary", "continues": false }
+  ],
+  "metadata": {
+    "affectedCount": 5,
+    "operationType": "bulk-delete",
+    "isDestructive": true
+  }
+}
+\`\`\`
+
+**Example Output:**
 \`\`\`javascript
 function render(data, onAction) {
-  function helperFunctionA() {} // Reusable logic
-  function helperFunctionB() {} // Reusable logic
-  const {items} = data;
-  // Your implementation here, these could include transforms, loops, etc.
-  return \`<div class="p-4">...</div>\`;
+  const { items, count } = data;
+  const itemList = items.map(item => \`<li class="py-2 border-b">\${item.title} <span class="text-gray-500">(\${item.status})</span></li>\`).join('');
+  return \`
+    <div class="p-6 max-w-2xl mx-auto">
+      <div class="bg-red-50 border-l-4 border-red-500 p-4 mb-6">
+        <h2 class="text-xl font-bold text-red-800 mb-2">⚠️ Confirm Permanent Deletion</h2>
+        <p class="text-red-700">You are about to permanently delete <strong>\${count}</strong> completed todos. This action cannot be undone.</p>
+      </div>
+      <div class="bg-white rounded-lg shadow p-4 mb-6">
+        <h3 class="font-semibold mb-3">Items to be deleted:</h3>
+        <ul class="list-none">\${itemList}</ul>
+      </div>
+      <div class="flex gap-3 justify-end">
+        <button onclick="onAction({ actionId: 'cancel' });" class="px-6 py-2 bg-gray-300 text-gray-700 rounded hover:bg-gray-400">Cancel</button>
+        <button onclick="onAction({ actionId: 'confirm-delete' });" class="px-6 py-2 bg-red-600 text-white rounded hover:bg-red-700 font-semibold">Yes, Delete Permanently</button>
+      </div>
+    </div>
+  \`;
+}
+\`\`\`
+
+## Example 2: Result Step - Task Completion
+\`\`\`json
+{
+  "dataStructure": "interface TaskResult { success: boolean; message: string; summary: { created: number; updated: number; deleted: number; }; items: Array<{ id: string; title: string; }>; }",
+  "mainGoal": "Organize my workspace todos",
+  "subGoal": "Bulk update todo priorities and statuses",
+  "stepType": "result",
+  "actions": [
+    { "id": "view-details", "label": "View Details", "variant": "secondary", "continues": true },
+    { "id": "done", "label": "Done", "variant": "primary", "continues": false }
+  ],
+  "taskCompleted": true,
+  "metadata": {
+    "affectedCount": 12,
+    "operationType": "bulk-update"
+  }
+}
+\`\`\`
+
+**Example Output:**
+\`\`\`javascript
+function render(data, onAction) {
+  const { success, message, summary, items } = data;
+  const total = summary.created + summary.updated + summary.deleted;
+  const itemList = items.slice(0, 5).map(item => \`<li class="py-1 text-sm">✓ \${item.title}</li>\`).join('');
+  const moreCount = items.length > 5 ? items.length - 5 : 0;
+  return \`
+    <div class="p-6 max-w-2xl mx-auto">
+      <div class="bg-green-50 border-l-4 border-green-500 p-6 mb-6 rounded">
+        <div class="flex items-center gap-3 mb-2">
+          <span class="text-3xl">✓</span>
+          <h2 class="text-2xl font-bold text-green-800">Task Completed Successfully!</h2>
+        </div>
+        <p class="text-green-700 text-lg">\${message}</p>
+      </div>
+      <div class="bg-white rounded-lg shadow p-6 mb-6">
+        <h3 class="font-semibold mb-4">Summary:</h3>
+        <div class="grid grid-cols-3 gap-4 mb-4">
+          <div class="text-center p-3 bg-blue-50 rounded"><div class="text-2xl font-bold text-blue-600">\${summary.created}</div><div class="text-sm text-gray-600">Created</div></div>
+          <div class="text-center p-3 bg-yellow-50 rounded"><div class="text-2xl font-bold text-yellow-600">\${summary.updated}</div><div class="text-sm text-gray-600">Updated</div></div>
+          <div class="text-center p-3 bg-red-50 rounded"><div class="text-2xl font-bold text-red-600">\${summary.deleted}</div><div class="text-sm text-gray-600">Deleted</div></div>
+        </div>
+        <div class="border-t pt-4">
+          <h4 class="font-medium mb-2">Updated Items:</h4>
+          <ul class="list-none">\${itemList}</ul>
+          \${moreCount > 0 ? \`<p class="text-sm text-gray-500 mt-2">...and \${moreCount} more</p>\` : ''}
+        </div>
+      </div>
+      <div class="flex gap-3 justify-end">
+        <button onclick="onAction({ actionId: 'view-details' });" class="px-6 py-2 bg-gray-300 text-gray-700 rounded hover:bg-gray-400">View Details</button>
+        <button onclick="onAction({ actionId: 'done' });" class="px-6 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 font-semibold">Done</button>
+      </div>
+    </div>
+  \`;
 }
 \`\`\``;
 }
