@@ -1,6 +1,6 @@
 # Reference-Based Context Engineering: Moving Data Outside the LLM's Attention Budget
 
-*How to enable AI agents to work with massive datasets with reduces context rot and hallucinations*
+*How to enable AI agents to work with massive datasets with reduced context rot and hallucinations*
 
 ---
 
@@ -14,25 +14,36 @@ But here's the key insight: **the environment's memory is orders of magnitude la
 
 ## Beyond Prompt Engineering: Reference-Based Context Management
 
-In their excellent article on [effective context engineering](https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents), Anthropic outlines strategies like compaction, structured note-taking, and multi-agent architectures. These are powerful techniques, but there's a complementary approach that addresses a different dimension of the problem: **reference-based data passing**.
+In their excellent article on [effective context engineering](https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents), Anthropic outlines strategies like compaction, structured note-taking, and multi-agent architectures. These are powerful techniques, but there's a complementary approach: **reference-based data passing**.
 
-The core idea is simple: instead of passing large data payloads directly through the LLM's context window, agents can pass lightweight **references** (like IDs or pointers) that point to data stored in the environment. The LLM can always retrieve the raw data when needed, but it doesn't have to carry it around in its attention budget.
+Instead of passing large data payloads through the LLM's context window, agents pass lightweight **references** (IDs or pointers) to data stored in the environment. The LLM can retrieve raw data when needed, but doesn't carry it in its attention budget.
 
-### How It Works
-
-Consider a typical agent workflow:
-
-**Traditional Approach:**
+```mermaid
+graph TB
+    subgraph Traditional["❌ Traditional Approach"]
+        A1[Agent] -->|Tool Call| B1[Tool]
+        B1 -->|Returns 1MB Data| C1[Context Window<br/>📦 1MB]
+        C1 -->|Agent Processes| D1[Next Tool Call]
+        D1 -->|Returns 1MB Data| E1[Context Window<br/>📦 2MB Total]
+        E1 -->|Context Rot ⚠️| F1[Performance Degrades]
+    end
+    
+    subgraph Reference["✅ Reference-Based Approach"]
+        A2[Agent] -->|Tool Call| B2[Tool]
+        B2 -->|Returns ref_123<br/>50 bytes| C2[Context Window<br/>📝 50 bytes]
+        C2 -->|Agent Processes| D2[Next Tool Call<br/>Passes ref_123]
+        D2 -->|Tool Resolves<br/>Internally| E2[Environment<br/>💾 Stores Data]
+        E2 -->|Returns ref_456<br/>50 bytes| C2
+        C2 -->|Clean Context ✨| F2[No Context Rot]
+    end
+    
+    style Traditional fill:#ffebee
+    style Reference fill:#e8f5e9
+    style F1 fill:#ffcdd2
+    style F2 fill:#c8e6c9
 ```
-Agent → Tool Call → Returns 1MB of data → Stored in context → Agent processes → Next tool call → Returns another 1MB → Context now 2MB...
-```
 
-**Reference-Based Approach:**
-```
-Agent → Tool Call → Returns reference ID "ref_123" (50 bytes) → Agent processes reference → Next tool call passes "ref_123" → Tool resolves reference internally → Returns new reference "ref_456" (50 bytes)
-```
-
-The agent maintains full control—it can request the actual data at any time using a `retrieve_reference` call—but by default, it works with lightweight references that don't consume the precious attention budget.
+The agent maintains full control—it can request actual data via `retrieve_reference`—but works with lightweight references by default.
 
 ## Implementation: Pydantic Discriminated Unions
 
@@ -71,12 +82,12 @@ When tools return large results—like entire database query results, file conte
 
 ```python
 # Agent calls analytical tool
-result = analyze_spreadsheet(spreadsheet_id="large_file.xlsx")
-# Returns: {"type": "reference", "ref_id": "analysis_result_123"}
+result = analyze_spreadsheet(spreadsheet_id="large_file.xlsx", result_reference_id="large_file_reference_id")
+# Returns: {"type": "reference", "ref_id": "large_file_reference_id"}
 
 # Agent passes reference to visualization tool
-visualize(data={"type": "reference", "ref_id": "analysis_result_123"})
-# Tool internally resolves reference, processes data, returns new reference
+visualize(data={"type": "reference", "ref_id": "large_file_reference_id"})
+# Tool internally resolves reference, processes data, returns data or optionally new reference
 ```
 
 The agent maintains full visibility and control but doesn't pay the token cost of carrying the data.
@@ -99,113 +110,21 @@ Data transformations can happen entirely outside the LLM's context window. The a
 
 ## Privacy, Compliance, and PII Protection
 
-Perhaps one of the most significant benefits of reference-based context engineering is its ability to address privacy, compliance, and Personally Identifiable Information (PII) concerns—critical requirements for healthcare (HIPAA), finance (PCI-DSS), and other regulated industries.
+Reference-based passing addresses critical privacy and compliance requirements for healthcare (HIPAA), finance (PCI-DSS), and other regulated industries.
 
-### The Privacy Problem with Traditional Approaches
+**The Problem**: When sensitive data flows through an LLM's context window, PII/PHI is sent to the provider's infrastructure, may be logged or cached, and becomes difficult to audit or control.
 
-When sensitive data flows through an LLM's context window, it creates several compliance challenges:
-
-- **Data Transmission**: PII and PHI (Protected Health Information) are sent to the LLM provider's infrastructure
-- **Context Persistence**: Data may be logged, cached, or used for training, creating compliance risks
-- **Access Control**: Once data is in the context, it's difficult to enforce fine-grained access controls
-- **Audit Trails**: Tracking who accessed what data becomes challenging when data is embedded in prompts
-
-### How References Solve This
-
-Reference-based passing fundamentally changes the privacy model:
-
-**1. Data Never Leaves Your Environment**
-
-With references, sensitive data never enters the LLM's context window. The agent works with opaque reference IDs like `"ref_patient_12345"` instead of actual patient records. The LLM provider never sees the sensitive data—only your environment does.
+**The Solution**: With references, sensitive data never enters the LLM's context. Agents work with opaque reference IDs (e.g., `"ref_patient_12345"`) instead of actual records. The LLM provider never sees sensitive data—only your environment does.
 
 ```python
 # Instead of this (PII in context):
-analyze_patient({
-    "name": "John Doe",
-    "ssn": "123-45-6789",
-    "diagnosis": "Condition X"
-})
+analyze_patient({"name": "John Doe", "ssn": "123-45-6789", "diagnosis": "X"})
 
 # Use this (only reference ID):
-analyze_patient({
-    "type": "reference",
-    "ref_id": "patient_record_abc123"
-})
+analyze_patient({"type": "reference", "ref_id": "patient_record_abc123"})
 ```
 
-**2. Access Control at the Environment Level**
-
-Since data resolution happens in your environment, you can enforce access controls, encryption, and audit logging at the point of access:
-
-- **Role-Based Access Control (RBAC)**: Check permissions when resolving references
-- **Encryption**: Store sensitive data encrypted, decrypt only when needed
-- **Audit Logging**: Log every reference resolution with user, timestamp, and purpose
-- **Data Minimization**: Resolve only the specific fields needed, not entire records
-
-**3. HIPAA Compliance**
-
-For healthcare applications, reference-based passing enables HIPAA-compliant agent workflows:
-
-- **Minimum Necessary**: Agents only retrieve the specific data needed for each operation
-- **Access Logging**: Every reference access can be logged for compliance audits
-- **Data Isolation**: Patient data remains in your HIPAA-compliant infrastructure
-- **Business Associate Agreements**: Since data never goes to the LLM provider, BAAs may not be required for the LLM service itself
-
-**4. Selective Data Retrieval**
-
-The agent can request only the data it needs, when it needs it:
-
-```python
-# Agent requests specific fields, not entire record
-retrieve_reference({
-    "reference_id": "patient_123",
-    "fields": ["diagnosis", "medications"]  # Only retrieve what's needed
-})
-```
-
-This supports the principle of data minimization—a core requirement of GDPR, HIPAA, and other privacy regulations.
-
-**5. De-identification and Anonymization**
-
-References enable sophisticated privacy-preserving patterns:
-
-- **Anonymized References**: Store anonymized data separately, reference both original and anonymized versions
-- **Pseudonymization**: Use pseudonymous reference IDs that can be mapped back only with proper authorization
-- **Differential Privacy**: Apply privacy-preserving transformations at reference resolution time
-
-**6. Compliance by Design**
-
-The architecture itself enforces privacy:
-
-- **No Data Leakage**: Impossible for sensitive data to accidentally appear in context
-- **Explicit Retrieval**: Agent must explicitly request data, creating clear audit trails
-- **Environment Control**: All data access happens in your controlled environment
-- **Regulatory Alignment**: Architecture aligns with privacy-by-design principles
-
-### Real-World Privacy Use Cases
-
-**Healthcare Analytics**
-An agent analyzing patient outcomes can work with thousands of patient records using references. The LLM never sees PHI—it only sees reference IDs and aggregated results. When it needs specific data, it requests it through controlled, audited channels.
-
-**Financial Services**
-An agent processing loan applications can work with credit reports, income statements, and other sensitive financial data via references. The actual PII remains in the bank's secure infrastructure, with access logged for compliance.
-
-**Customer Support**
-An agent handling support tickets can reference customer records without exposing full customer profiles. It retrieves only the specific information needed to resolve each ticket, minimizing data exposure.
-
-**Research and Analytics**
-Researchers can use agents to analyze datasets containing PII while keeping the actual data in secure, access-controlled environments. The agent orchestrates analysis workflows using references, and results can be aggregated or anonymized before being returned.
-
-### The Compliance Advantage
-
-Reference-based passing doesn't just make compliance *possible*—it makes it *easier*:
-
-- **Clear Boundaries**: Data either stays in your environment (references) or is explicitly retrieved (audited)
-- **Reduced Risk**: No risk of accidental data exposure in prompts or context
-- **Simplified Auditing**: Every data access is explicit and logged
-- **Regulatory Alignment**: Architecture supports privacy-by-design principles
-
-This approach is particularly valuable for organizations that need to use AI agents but are constrained by regulatory requirements. It enables the power of agentic AI while maintaining the privacy and compliance standards that regulated industries require.
+Since data resolution happens in your environment, you can enforce RBAC, encryption, audit logging, and data minimization at the point of access. This enables HIPAA-compliant workflows where patient data remains in your infrastructure, access is logged for audits, and agents retrieve only the minimum necessary data. The architecture enforces privacy by design—impossible for sensitive data to accidentally appear in context, with explicit retrieval creating clear audit trails.
 
 ## Integration with Anthropic's Context Engineering Strategies
 
@@ -230,9 +149,8 @@ References could enable lazy evaluation patterns where tool calls aren't execute
 For structured data like JSON, exposing JSONPath capabilities via transformer tools could move many deterministic transformations outside the LLM. The agent could specify transformations declaratively:
 
 ```python
-transform(
+jsonpath(
     source={"type": "reference", "ref_id": "data_123"},
-    operation="jsonpath",
     path="$.users[*].email"
 )
 ```
