@@ -14,7 +14,27 @@ export type GeminiToolsBundle = {
   examples: FewShotExample[];
 };
 
-export type ProviderBundle = GeminiToolsBundle;
+/**
+ * Claude tool definition (JSON Schema format)
+ */
+export type ClaudeTool = {
+  name: string;
+  strict: boolean;
+  description: string;
+  input_schema: {
+    type: "object";
+    properties: Record<string, unknown>;
+    required?: string[];
+    [key: string]: unknown;
+  };
+};
+
+export type ClaudeToolsBundle = {
+  tools: ClaudeTool[];
+  examples: FewShotExample[];
+};
+
+export type ProviderBundle = GeminiToolsBundle | ClaudeToolsBundle;
 
 // Public API
 export function manifestToGemini(manifest: WAPManifest): GeminiToolsBundle {
@@ -31,6 +51,21 @@ export function manifestToGemini(manifest: WAPManifest): GeminiToolsBundle {
 
 export function toProviderTools(manifest: WAPManifest): ProviderBundle {
   return manifestToGemini(manifest);
+}
+
+/**
+ * Transform WAP manifest to Claude tools format
+ */
+export function manifestToClaudeTools(manifest: WAPManifest): ClaudeToolsBundle {
+  const tools: ClaudeTool[] = [
+    ...manifest.tools.map(toolToClaude),
+    // Inject render meta-tool for orchestration UIs
+    RENDER_TOOL_FOR_CLAUDE
+  ];
+  return {
+    tools,
+    examples: buildFewShots(manifest)
+  };
 }
 
 // Few-shot examples
@@ -172,6 +207,141 @@ const RENDER_TOOL_FOR_GEMINI: GeminiFunctionDeclaration = {
       required: ["type", "actionId"]
     }
   };
+
+// Claude tool mappers
+function toolToClaude(tool: WAPToolDeclaration): ClaudeTool {
+  // Build description with tags
+  const tagsJson = JSON.stringify(tool.tags);
+  const descriptionWithTags = `${tool.description}\n@tags: ${tagsJson}`;
+  
+  const inputSchema = wapSchemaToClaudeSchema(tool.parameters);
+  
+  return {
+    name: tool.name,
+    strict: true,
+    description: descriptionWithTags,
+    input_schema: inputSchema as ClaudeTool["input_schema"],
+  };
+}
+
+// JSON Schema mappers for Claude (uses standard JSON Schema)
+function wapSchemaToClaudeSchema(wapSchema: WAPSchema): Record<string, unknown> {
+  const { examples, anyOf, type, items, properties, ...rest } = wapSchema;
+  
+  const schema: Record<string, unknown> = {
+    ...rest,
+  };
+
+  // Map WAP schema type to JSON Schema type
+  if (type) {
+    const jsonSchemaType = WAP_SCHEMA_TYPE_TO_JSON_SCHEMA_TYPE[type];
+    if (jsonSchemaType) {
+      schema["type"] = jsonSchemaType;
+    }
+  }
+
+  // Handle nested structures
+  if (items) {
+    schema["items"] = wapSchemaToClaudeSchema(items);
+  }
+
+  if (properties) {
+    schema["properties"] = Object.fromEntries(
+      Object.entries(properties).map(([key, value]) => [
+        key,
+        wapSchemaToClaudeSchema(value),
+      ])
+    );
+  }
+
+  if (anyOf) {
+    schema["anyOf"] = anyOf.map((s) => wapSchemaToClaudeSchema(s));
+  }
+
+  // Handle examples (Claude doesn't use examples in schema, but we can add them as description)
+  if (examples && examples.length > 0) {
+    // Note: Claude doesn't support examples in input_schema, but we can add to description if needed
+  }
+
+  return schema;
+}
+
+const WAP_SCHEMA_TYPE_TO_JSON_SCHEMA_TYPE: Record<WAPSchemaType, string> = {
+  [WAPSchemaType.STRING]: "string",
+  [WAPSchemaType.NUMBER]: "number",
+  [WAPSchemaType.INTEGER]: "integer",
+  [WAPSchemaType.BOOLEAN]: "boolean",
+  [WAPSchemaType.ARRAY]: "array",
+  [WAPSchemaType.OBJECT]: "object",
+  [WAPSchemaType.NULL]: "null",
+  [WAPSchemaType.TYPE_UNSPECIFIED]: "object", // Default to object
+};
+
+// Render tool for Claude
+const RENDER_TOOL_FOR_CLAUDE: ClaudeTool = {
+  name: "render",
+  strict: true,
+  description:
+    "Generate dynamic UI render function for displaying substep results. Returns JavaScript code for function render(data, onAction). You must pass both the data structures (type definitions) and the actual data to render.",
+  input_schema: {
+    type: "object",
+    properties: {
+      dataStructure: {
+        type: "string",
+        description:
+          "TypeScript type definitions as a string. Includes inline descriptive comments for each property, even inner properties.",
+      },
+      data: {
+        type: "string",
+        description:
+          "The JSON string of the actual data to render. Structure must align with the typescript structure defined in dataStructure. This is the data that will be passed to the generated render function.",
+      },
+      mainGoal: {
+        type: "string",
+        description: "The user's original natural language request",
+      },
+      subGoal: {
+        type: "string",
+        description: "What this specific substep is trying to achieve",
+      },
+      stepType: {
+        type: "string",
+        description: "Type of UI to generate",
+        enum: ["preview", "confirm", "progress", "result", "error"],
+      },
+      actions: {
+        type: "array",
+        items: {
+          type: "object",
+          properties: {
+            id: { type: "string" },
+            label: { type: "string" },
+            variant: {
+              type: "string",
+              enum: ["primary", "danger", "secondary", "success"],
+            },
+            continues: { type: "boolean" },
+          },
+          required: ["id", "label", "continues"],
+        },
+      },
+      taskCompleted: {
+        type: "boolean",
+        description:
+          "If true, signals that the task is complete and the conversation should end. Set to true for the final render call when all work is done.",
+      },
+      metadata: {
+        type: "object",
+        properties: {
+          affectedCount: { type: "number" },
+          operationType: { type: "string" },
+          isDestructive: { type: "boolean" },
+        },
+      },
+    },
+    required: ["dataStructure", "data", "mainGoal", "subGoal", "stepType", "actions"],
+  },
+};
 
 // Utilities
 function compactText(text: string): string {

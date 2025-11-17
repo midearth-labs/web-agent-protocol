@@ -2,8 +2,8 @@
  * Main orchestrator for WAP Dynamic UI Orchestration
  */
 
-import { createGeminiClient } from "./gemini-client.js";
-import { manifestToGemini } from "../api-client/manifest.transform.js";
+import { createLLMProvider } from "./llm-provider.js";
+import { buildFewShots } from "../api-client/manifest.transform.js";
 import { ApiClient } from "../api-client/api-client.js";
 import { executeSiteAPI, executeRender } from "./tool-executor.js";
 import { SYSTEM_INSTRUCTION } from "./system-instruction.js";
@@ -14,68 +14,15 @@ import type {
   RenderFunctionCall,
   RenderToolResponse,
   UserAction,
-  FunctionResponse,
   OrchestrateResult,
 } from "./types.js";
-import type { Candidate, Content, Part } from "@google/genai";
-
-/**
- * Extract thinking from Gemini candidate
- * 
- * According to the official Gemini API docs:
- * - Parts with thinking have `thought: true` and the text in `text` property
- * - See: https://ai.google.dev/gemini-api/docs/thinking
- */
-function extractThinking(candidate: Candidate): string | null {
-  // Check for thinking in content parts
-  // Parts with thinking have thought: true and the text in the text property
-  const thinkingParts = candidate?.content?.parts?.filter(
-    (part): part is Part =>
-      part.thought === true && part.text !== undefined
-  ) || [];
-
-  if (thinkingParts.length === 0) {
-    return null;
-  }
-
-  // Concatenate all thought parts
-  return thinkingParts.map((part) => part.text).join("\n") || null;
-}
-
-/**
- * Extract function calls from Gemini candidate
- */
-function extractFunctionCalls(candidate: Candidate): FunctionCall[] {
-  const parts = candidate?.content?.parts || [];
-  const functionCalls: FunctionCall[] = [];
-
-  for (const part of parts) {
-    if (part.functionCall) {
-      functionCalls.push(part.functionCall);
-    }
-  }
-
-  return functionCalls;
-}
-
-/**
- * Extract text from Gemini candidate
- */
-function extractText(candidate: Candidate): string | null {
-  const parts = candidate?.content?.parts || [];
-  const textParts = parts
-    .filter((part): part is Part => part.text !== undefined)
-    .map((part) => part.text)
-    .join("");
-
-  return textParts || null;
-}
+import type { LLMProvider, LLMMessage, LLMFunctionCall, LLMFunctionResponse } from "./llm-provider.js";
 
 /**
  * Type guard to check if a function call is a render call
  * Also validates and casts the args to RenderToolParams
  */
-function isRenderFunctionCall(call: FunctionCall): call is RenderFunctionCall {
+function isRenderFunctionCall(call: LLMFunctionCall | FunctionCall): call is RenderFunctionCall {
   if (call.name !== "render") {
     return false;
   }
@@ -195,9 +142,9 @@ async function processRenderWithUserAction(
  * Returns responses in original order
  */
 async function executeFunctionCallsInOrder(
-  functionCalls: FunctionCall[],
+  functionCalls: LLMFunctionCall[],
   apiClient: ApiClient,
-  renderGeminiClient: ReturnType<typeof createGeminiClient>,
+  renderProvider: LLMProvider,
   callbacks: OrchestratorCallbacks | undefined,
   isAborted: () => boolean,
   setPendingUserAction: (promise: {
@@ -206,12 +153,12 @@ async function executeFunctionCallsInOrder(
     reject: (error: Error) => void;
   }) => void,
   handleUserAction: (action: UserAction) => void
-): Promise<FunctionResponse[]> {
+): Promise<LLMFunctionResponse[]> {
   // Index each call to preserve order
   const indexedCalls = functionCalls.map((call, index) => ({ call, index }));
 
   // Separate renders from normals
-  const normalCalls: Array<{ call: FunctionCall; index: number }> = [];
+  const normalCalls: Array<{ call: LLMFunctionCall; index: number }> = [];
   const renderCalls: Array<{ call: RenderFunctionCall; index: number }> = [];
 
   indexedCalls.forEach(({ call, index }) => {
@@ -227,12 +174,24 @@ async function executeFunctionCallsInOrder(
     if (isAborted()) {
       throw new Error("Workflow aborted");
     }
-    const response = await executeSiteAPI(call, apiClient);
-    return { index, response };
+    // Convert LLMFunctionCall to FunctionCall for executeSiteAPI
+    const functionCall: FunctionCall = {
+      name: call.name,
+      args: call.args,
+    };
+    const response = await executeSiteAPI(functionCall, apiClient);
+    // Convert FunctionResponse to LLMFunctionResponse
+    return { 
+      index, 
+      response: {
+        name: response.name,
+        response: response.response as Record<string, unknown>,
+      } as LLMFunctionResponse
+    };
   });
 
   // Execute render chain serially
-  const renderResults: Array<{ index: number; response: FunctionResponse }> = [];
+  const renderResults: Array<{ index: number; response: LLMFunctionResponse }> = [];
   let taskCompleted = false;
   
   for (const { call, index } of renderCalls) {
@@ -243,7 +202,7 @@ async function executeFunctionCallsInOrder(
     // Execute render with retry logic
     let renderCode: string;
     try {
-      renderCode = await executeRender(call, renderGeminiClient);
+      renderCode = await executeRender(call, renderProvider);
     } catch (error) {
       // Show retry dialog
       if (callbacks?.onRenderRetry) {
@@ -255,7 +214,7 @@ async function executeFunctionCallsInOrder(
           throw new Error("Render cancelled by user");
         }
         // Retry
-        renderCode = await executeRender(call, renderGeminiClient);
+        renderCode = await executeRender(call, renderProvider);
       } else {
         throw error;
       }
@@ -288,7 +247,7 @@ async function executeFunctionCallsInOrder(
   const allResults = [...normalResults, ...renderResults];
 
   // Create response map
-  const responseMap = new Map<number, FunctionResponse>();
+  const responseMap = new Map<number, LLMFunctionResponse>();
   allResults.forEach(({ index, response }) => {
     responseMap.set(index, response);
   });
@@ -316,42 +275,42 @@ async function executeFunctionCallsInOrder(
  * Main orchestration function
  * Returns abort function immediately, orchestration runs in background
  */
-export function orchestrate(
+export async function orchestrate(
   userInput: string,
   config: OrchestratorConfig,
   callbacks?: OrchestratorCallbacks
-): OrchestrateResult {
-  const { apiKey, manifest, apiBaseUrl } = config;
+): Promise<OrchestrateResult> {
+  const { apiKey, manifest, apiBaseUrl, provider } = config;
 
-  // Build tools from manifest
-  const toolsBundle = manifestToGemini(manifest);
-  const tools = toolsBundle.tools;
-
-  // Concatenate user journey examples with system instruction
-  const examplesText = toolsBundle.examples.length > 0
-    ? `\n\n# User Journey Examples\n\n${toolsBundle.examples
+  // Build examples text from manifest for system instruction
+  const examples = buildFewShots(manifest);
+  const examplesText = examples.length > 0
+    ? `\n\n# User Journey Examples\n\n${examples
         .map((example, index) => `## Example ${index + 1}:\n\nUser: ${example.user}\n\nAssistant: ${example.assistant}`)
         .join("\n\n")}`
     : "";
 
   const systemInstructionWithExamples = SYSTEM_INSTRUCTION + examplesText;
 
-  // Initialize clients with system instruction and tools
-  const geminiClient = createGeminiClient(
-    { apiKey },
-    {
+  // Initialize LLM provider with system instruction and manifest
+  // Provider will transform manifest to its own tool format internally
+  const llmProvider = await createLLMProvider({
+    apiKey,
+    provider,
+    options: {
       systemInstruction: systemInstructionWithExamples,
-      tools: [{ functionDeclarations: tools }],
-    }
-  );
+      manifest,
+    },
+  });
   
-  // Initialize render client (separate from main orchestrator client)
-  const renderGeminiClient = createGeminiClient(
-    { apiKey },
-    {
+  // Initialize render provider (separate from main orchestrator provider)
+  const renderProvider = await createLLMProvider({
+    apiKey,
+    provider,
+    options: {
       systemInstruction: "You are a UI code generator. Generate JavaScript functions that render HTML interfaces.",
-    }
-  );
+    },
+  });
   
   const apiClient = new ApiClient({
     baseUrl: apiBaseUrl,
@@ -413,10 +372,10 @@ export function orchestrate(
   // Start orchestration in background (don't await)
   (async () => {
 
-  let nextConversation: Content[] = [
+  let nextConversation: LLMMessage[] = [
     {
       role: "user",
-      parts: [{ text: userInput }],
+      content: userInput,
     },
   ];
 
@@ -430,23 +389,16 @@ export function orchestrate(
         break;
       }
 
-      // Generate content with Gemini
-      // First iteration: send initial user message
-      // Subsequent iterations: send empty array to continue conversation
-      const response = await geminiClient.generateContent(nextConversation);
+      // Generate content with LLM provider
+      const response = await llmProvider.generateContent(nextConversation);
       nextConversation = [];
 
       if (aborted) {
         break;
       }
 
-      const candidate = response.candidates?.[0];
-      if (!candidate) {
-        throw new Error("No response from Gemini");
-      }
-
       // Extract and display thinking
-      const thinking = extractThinking(candidate);
+      const thinking = llmProvider.extractThinking(response);
       if (thinking) {
         if (callbacks?.onThinking) {
           callbacks.onThinking(thinking);
@@ -454,11 +406,11 @@ export function orchestrate(
       }
 
       // Extract function calls
-      const functionCalls = extractFunctionCalls(candidate);
+      const functionCalls = llmProvider.extractFunctionCalls(response);
 
       if (functionCalls.length === 0) {
         // No more function calls, show final response
-        const text = extractText(candidate);
+        const text = llmProvider.extractText(response);
         if (text) {
           if (callbacks?.onResponse) {
             callbacks.onResponse(text);
@@ -469,12 +421,12 @@ export function orchestrate(
       }
 
       // Execute function calls with parallel normals + serial renders
-      let functionResponses: FunctionResponse[];
+      let functionResponses: LLMFunctionResponse[];
       try {
         functionResponses = await executeFunctionCallsInOrder(
           functionCalls,
           apiClient,
-          renderGeminiClient,
+          renderProvider,
           callbacks,
           isAborted,
           setPendingUserAction,
@@ -483,24 +435,6 @@ export function orchestrate(
       } catch (error) {
         // Check if this is a task completion signal
         if (error instanceof Error && error.message === "TASK_COMPLETED") {
-          /*
-          // Extract responses from error if available
-          functionResponses = (error as any).responses || [];
-          // Send responses back to model before stopping
-          if (functionResponses.length > 0) {
-            await geminiClient . generateContent([
-              {
-                role: "user",
-                parts: functionResponses.map((fr) => ({
-                  functionResponse: {
-                    name: fr.name,
-                    response: fr.response as Record<string, unknown>,
-                  },
-                })),
-              },
-            ]);
-          }
-          */
           continueLoop = false;
           break;
         }
@@ -511,22 +445,13 @@ export function orchestrate(
         break;
       }
 
-      // Populate nextConversation with model's function calls and function responses
-      // Following Gemini API pattern: add model's function call, then user's function response
-      functionCalls.forEach((functionCall, index) => {
-        nextConversation.push({
-          role: "model",
-          parts: [{ functionCall: functionCall }],
-        });
-        nextConversation.push({
-          role: "user",
-          parts: [
-            {
-              functionResponse: functionResponses[index]!,
-            },
-          ],
-        })
-      });
+      // Create function response messages using provider's method
+      const responseMessages = llmProvider.createFunctionResponseMessages(
+        functionCalls,
+        functionResponses
+      );
+      nextConversation = responseMessages;
+      
       // Continue loop to get next response
       continue;
     } catch (error) {

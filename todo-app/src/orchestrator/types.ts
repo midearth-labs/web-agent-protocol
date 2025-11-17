@@ -6,6 +6,12 @@ import type { WAPManifest } from "../api-client/manifest.type.js";
 import type { FunctionCall  } from "@google/genai";
 export type { FunctionCall  } from "@google/genai";
 export type { FunctionResponse  } from "@google/genai";
+import type { LLMProviderType } from "./llm-provider.js";
+
+/**
+ * LLM Provider type
+ */
+export type { LLMProviderType } from "./llm-provider.js";
 
 /**
  * Configuration for the orchestrator
@@ -14,6 +20,7 @@ export type OrchestratorConfig = {
   apiKey: string;
   manifest: WAPManifest;
   apiBaseUrl: string;
+  provider: LLMProviderType; // Required, no default
 }
 
 /**

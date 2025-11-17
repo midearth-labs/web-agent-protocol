@@ -2,8 +2,8 @@
  * Browser integration for orchestrator
  */
 
-import { initOrchestrator, getApiKey } from "./index.js";
-import type { OrchestratorCallbacks } from "./types.js";
+import { initOrchestrator, getApiKey, getProvider } from "./index.js";
+import type { LLMProviderType, OrchestratorCallbacks } from "./types.js";
 
 /**
  * Initialize orchestrator in browser
@@ -106,23 +106,25 @@ export async function initBrowserOrchestrator() {
         return;
       }
 
-      // Check if API key is set (re-check in case it was updated)
+      // Check if provider and API key are set (re-check in case they were updated)
+      let currentProvider: LLMProviderType;
       let currentApiKey: string;
       try {
-        currentApiKey = getApiKey();
+        currentProvider = getProvider();
+        currentApiKey = getApiKey(currentProvider);
       } catch (error) {
         if (callbacks.onError) {
           callbacks.onError(
             new Error(
-              "Please set your Gemini API key in the field above and click 'Save' before submitting requests."
+              `Please set your API key and provider in the field above and click 'Save' before submitting requests.`
             )
           );
         }
         return;
       }
 
-      // Initialize orchestrator with current API key
-      const orchestrator = await initOrchestrator(currentApiKey, "http://localhost:3000/api/v1/", callbacks);
+      // Initialize orchestrator with current API key and provider
+      const orchestrator = await initOrchestrator(currentApiKey, "http://localhost:3000/api/v1/", currentProvider, callbacks);
 
       // Disable submit button, enable cancel button
       submitBtn.disabled = true;
@@ -136,7 +138,7 @@ export async function initBrowserOrchestrator() {
       clearDisplay();
 
       // Execute orchestration (returns abort function immediately)
-      const result = orchestrator.execute(input);
+      const result = await orchestrator.execute(input);
       currentAbort = result.abort;
 
       // Note: Orchestration runs in background, we don't await it

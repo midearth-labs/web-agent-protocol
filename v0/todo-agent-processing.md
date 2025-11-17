@@ -9,7 +9,7 @@ Given the methods in IApiClient @api-client-interface.ts , show me a plan on how
 "Add a todo to review Q4 budget, make it due end of next week"
 "Mark all todos with 'meeting' in the title as complete"
 "Delete all todos that are overdue by more than 30 days"
-"I need to prepare slides for the investor meeting on Nov 15, book the conference room, and send agenda by Nov 13"
+"I need to prepare slides for the investor meeting on Nov 25, book the conference room, and send agenda by Nov 23"
 "Push all incomplete todos due this week to next Monday, except anything with 'urgent' in it"
 
 Use the User Journeys examples output format to output the plan

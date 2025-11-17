@@ -4,7 +4,8 @@
 
 import { ApiClient } from "../api-client/api-client.js";
 import type { FunctionCall, RenderFunctionCall, FunctionResponse } from "./types.js";
-import { executeRenderTool, type RenderGeminiClient } from "./render-executor.js";
+import { executeRenderTool } from "./render-executor.js";
+import type { LLMProvider } from "./llm-provider.js";
 import type { ListTodosQuery } from "../models/api-model.js";
 
 /**
@@ -138,9 +139,9 @@ export async function executeSiteAPI(
  */
 export async function executeRender(
   functionCall: RenderFunctionCall,
-  geminiClient: RenderGeminiClient
+  llmProvider: LLMProvider
 ): Promise<string> {
-  return await executeRenderTool(functionCall.args, geminiClient);
+  return await executeRenderTool(functionCall.args, llmProvider);
 }
 
 

@@ -10,7 +10,6 @@
     "build:browser": "esbuild src/orchestrator/index.ts --bundle --format=esm --platform=browser --target=es2022 --outfile=dist/public/orchestrator.bundle.js",
     "copy:output": "cp dist/public/orchestrator.bundle.js src/public/orchestrator.bundle.js",
     "build:all": "npm run build && npm run build:browser && npm run copy:output",
-  
     "dev": "tsx watch src/server.ts",
     "start": "node dist/src/server.js",
     "type-check": "tsc --noEmit",
@@ -26,6 +25,7 @@
   "author": "",
   "license": "MIT",
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.69.0",
     "@google/genai": "^1.29.0",
     "@types/morgan": "^1.9.10",
     "express": "^5.1.0",

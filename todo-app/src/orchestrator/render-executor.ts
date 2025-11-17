@@ -3,18 +3,7 @@
  */
 
 import type { RenderToolParams } from "./types.js";
-import type { GenerateContentResponse } from "@google/genai";
-import type { Content } from "@google/genai";
-
-/**
- * Type for Gemini client used for render operations
- */
-export type RenderGeminiClient = {
-  generateContent(
-    newContents: Content[],
-    saveConversation?: boolean
-  ): Promise<GenerateContentResponse>;
-};
+import type { LLMProvider, LLMMessage } from "./llm-provider.js";
 
 /**
  * Build the prompt for render generation
@@ -341,26 +330,23 @@ function validateRenderFunction(code: string): void {
  */
 export async function executeRenderTool(
   params: RenderToolParams,
-  geminiClient: RenderGeminiClient
+  llmProvider: LLMProvider
 ): Promise<string> {
   const prompt = buildRenderPrompt(params);
 
-  const response = await geminiClient.generateContent(
-    [{ role: "user", parts: [{ text: prompt }] }],
+  const messages: LLMMessage[] = [
+    { role: "user", content: prompt },
+  ];
+
+  const response = await llmProvider.generateContent(
+    messages,
     false // saveConversation=false
   );
 
-  const candidate = response.candidates?.[0];
-  if (!candidate) {
-    throw new Error("No response from Gemini");
-  }
-
-  const text = candidate.content?.parts
-    ?.map((part) => (part.text && !part.thought ? part.text : ""))
-    .join("") || "";
+  const text = llmProvider.extractText(response);
 
   if (!text) {
-    throw new Error("Empty response from Gemini");
+    throw new Error("Empty response from LLM provider");
   }
 
   // Extract function from response
