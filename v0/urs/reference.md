@@ -8,7 +8,7 @@
 
 Imagine an AI agent tasked with copying 50GB of data from one location to another, or analyzing a spreadsheet with millions of rows. Traditional approaches would either fail (hitting context limits) or degrade performance as the agent struggles to maintain coherence across thousands of tokens of intermediate data.
 
-This is the fundamental challenge of **context engineering**: LLMs have finite attention budgets, and every token we add to the context window competes for that attention. As [Anthropic's research](https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents) has shown, even as context windows grow larger, we still face **context rot**—the model's ability to accurately recall information decreases as context length increases.
+This is the fundamental challenge of **context engineering**: LLMs have finite attention budgets, and every token we add to the context window competes for that attention. As [Anthropic's research](https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents) has shown, even as context windows grow larger, we still face **context rot** - the model's ability to accurately recall information decreases as context length increases.
 
 But here's the key insight: **the environment's memory is orders of magnitude larger than the LLM's context window**. Why are we forcing the LLM to carry all this data in its attention budget when we can simply store it outside and let the agent reference it on demand?
 
@@ -43,7 +43,7 @@ graph TB
     style F2 fill:#c8e6c9
 ```
 
-The agent maintains full control—it can request actual data via `retrieve_reference`—but works with lightweight references by default.
+The agent maintains full control - it can request actual data via `retrieve_reference` - but works with lightweight references by default.
 
 ## Implementation: Pydantic Discriminated Unions
 
@@ -78,7 +78,7 @@ An agent can orchestrate operations on datasets that are orders of magnitude lar
 
 ### 2. Tool Result Management
 
-When tools return large results—like entire database query results, file contents, or API responses—these can be stored as references:
+When tools return large results - like entire database query results, file contents, or API responses - these can be stored as references:
 
 ```python
 # Agent calls analytical tool
@@ -114,7 +114,7 @@ Reference-based passing addresses critical privacy and compliance requirements f
 
 **The Problem**: When sensitive data flows through an LLM's context window, PII/PHI is sent to the provider's infrastructure, may be logged or cached, and becomes difficult to audit or control.
 
-**The Solution**: With references, sensitive data never enters the LLM's context. Agents work with opaque reference IDs (e.g., `"ref_patient_12345"`) instead of actual records. The LLM provider never sees sensitive data—only your environment does.
+**The Solution**: With references, sensitive data never enters the LLM's context. Agents work with opaque reference IDs (e.g., `"ref_patient_12345"`) instead of actual records. The LLM provider never sees sensitive data - only your environment does.
 
 ```python
 # Instead of this (PII in context):
@@ -124,7 +124,7 @@ analyze_patient({"name": "John Doe", "ssn": "123-45-6789", "diagnosis": "X"})
 analyze_patient({"type": "reference", "ref_id": "patient_record_abc123"})
 ```
 
-Since data resolution happens in your environment, you can enforce RBAC, encryption, audit logging, and data minimization at the point of access. This enables HIPAA-compliant workflows where patient data remains in your infrastructure, access is logged for audits, and agents retrieve only the minimum necessary data. The architecture enforces privacy by design—impossible for sensitive data to accidentally appear in context, with explicit retrieval creating clear audit trails.
+Since data resolution happens in your environment, you can enforce RBAC, encryption, audit logging, and data minimization at the point of access. This enables HIPAA-compliant workflows where patient data remains in your infrastructure, access is logged for audits, and agents retrieve only the minimum necessary data. The architecture enforces privacy by design - impossible for sensitive data to accidentally appear in context, with explicit retrieval creating clear audit trails.
 
 ## Integration with Anthropic's Context Engineering Strategies
 
@@ -173,7 +173,7 @@ A particularly interesting possibility: the agent could build up a graph of oper
 
 Context engineering is evolving from prompt optimization to holistic context management. As [Anthropic's research](https://claude.com/blog/context-management) shows, treating context as a finite, precious resource is essential for building capable agents.
 
-Reference-based data passing represents a natural extension of this thinking: if the environment can store data more efficiently than the LLM can, why not leverage that? The agent maintains full control and visibility—it can always retrieve the raw data—but it doesn't have to pay the attention cost of carrying it around.
+Reference-based data passing represents a natural extension of this thinking: if the environment can store data more efficiently than the LLM can, why not leverage that? The agent maintains full control and visibility - it can always retrieve the raw data - but it doesn't have to pay the attention cost of carrying it around.
 
 This approach is particularly powerful for:
 - **Data-intensive workflows**: ETL, migration, analysis
@@ -182,7 +182,7 @@ This approach is particularly powerful for:
 - **Resource-constrained scenarios**: When token costs or context limits are concerns
 - **Privacy-sensitive applications**: Healthcare (HIPAA), finance (PCI-DSS), and other regulated industries where PII/PHI must remain in controlled environments
 
-The implementation is straightforward—using Pydantic discriminated unions, we can create tools that transparently support both value and reference modes. The LLM naturally learns to use references for large data and values for small data, optimizing its own context usage.
+The implementation is straightforward - using Pydantic discriminated unions, we can create tools that transparently support both value and reference modes. The LLM naturally learns to use references for large data and values for small data, optimizing its own context usage.
 
 For a complete working example with Google Gemini, see this [implementation notebook](https://github.com/midearth-labs/web-agent-protocol/blob/main/v0/urs/notebooks/pass-context-references.ipynb).
 
@@ -192,7 +192,7 @@ As AI agents tackle increasingly complex and data-intensive tasks, context engin
 
 The key insight is simple: **the environment is the agent's extended memory**. By storing data outside the LLM's attention budget and passing lightweight references instead, we enable agents to work with datasets of any size while maintaining the flexibility and control that makes agents powerful.
 
-This isn't a replacement for careful prompt engineering, compaction, or structured note-taking—it's a complementary technique that addresses a fundamental constraint: the finite nature of attention. As we build more capable agents, techniques like this will be essential for scaling to real-world problems.
+This isn't a replacement for careful prompt engineering, compaction, or structured note-taking - it's a complementary technique that addresses a fundamental constraint: the finite nature of attention. As we build more capable agents, techniques like this will be essential for scaling to real-world problems.
 
 ---
 

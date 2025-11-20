@@ -219,7 +219,10 @@ async function executeFunctionCallsInOrder(
         throw error;
       }
     }
-
+    // ToolTask should be called ToolState, remove everything thatis tied to JSONPath e.g. InputPath, OutputPath, ResultPath etc. Since Next and End is already defined on State why repeat it across all subtypes. Only use Assign and Output and Arguments for all states. 
+    // Ensure the Retry also looks like ASL but no JSONPath fields, create a common type called StringOrJSONataExpression which is a string (but add a comment to include that it could be one of the two and add examples)
+    // initialize context functions with the custom functions declared here https://docs.aws.amazon.com/step-functions/latest/dg/transforming-data.html#jsonata-functions-provided-by-sfn
+    //  ErrorHandler should be named Catch and follow the semantics here https://docs.aws.amazon.com/step-functions/latest/dg/concepts-error-handling.html#error-handling-examples
     // Process render with user action handling
     const result = await processRenderWithUserAction(
       call,
