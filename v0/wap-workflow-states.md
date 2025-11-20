@@ -314,6 +314,7 @@ type Choice = BaseState & NextStateProgression & {
 
 // Choice rule with JSONata condition
 type ChoiceRule = {
+  Comment: string; // 
   Condition: StringOrJSONataExpression; // JSONata expression that evaluates to boolean (matches ASL)
   // Example: "{% $data.filteredCount = 0 %}"
 } & NextStateProgression
