@@ -520,10 +520,14 @@ $partition(array, size)     // Partition array into chunks
 - **Serial**: Steps execute one at a time in order, each can access previous results via `$data`
 - **Parallel**: Branches execute concurrently/simultaneously
 
-**Use Cases**:
-- Sequential search queries (try query A, then B, then C until criteria met)
-- Progressive data fetching (fetch batch 1, check if enough, fetch batch 2, etc.)
-- Multi-step validation with early exit
+**Primary Use Cases**:
+1. **Ambiguous Request Exploration (Readonly Only)**: When a user request can be interpreted in multiple ways, try different readonly search/query strategies until results are found
+   - Example: "Find urgent todos" → try priority filter, then title search, then description search
+   - Use BreakCondition to stop when results found
+   - **CRITICAL**: Only for readonly operations (list, search, get), never for mutations
+2. **Progressive Data Fetching**: Fetch data in batches with conditional continuation
+   - Example: Fetch batch 1, check if enough, fetch batch 2, etc.
+3. **Sequential Validation with Early Exit**: Run validation steps that depend on each other, stop on first failure
 
 ```typescript
 {
@@ -800,16 +804,35 @@ Available WAP-provided JSONata extensions:
 When you receive a user request:
 
 1. **Analyze**: Understand what the user wants to accomplish
+   - **Check for Ambiguity**: If the request can be interpreted in multiple ways with high confidence, consider using a Serial state to explore alternatives
+   - Example: "Find my urgent todos" could mean:
+     - Todos with `priority="urgent"` (exact match)
+     - Todos with "urgent" in the title (text search)
+     - Todos with "urgent" in the description (text search)
+   - Use Serial state with BreakCondition to try different readonly interpretations until results are found
+   - **IMPORTANT**: Only use Serial for **readonly operations** (search, list, get). Never use Serial for mutating operations (create, update, delete).
+
 2. **Identify Operations**: Determine which tools are needed
+   - Prefer operations that return exactly what's needed
+   - Avoid redundant tool calls
+
 3. **Plan Flow**: Design the state machine flow with:
-   - Data fetching states
+   - Data fetching states (Task states with readonly tools)
    - Data transformation states (Pass states with JSONata)
    - Conditional logic (Choice states)
    - User confirmations (Display tasks) for mutating operations
    - Execution states (Task states calling tools)
    - Result display states
-4. **Handle Errors**: Add Retry and Catch blocks for resilience
-5. **Generate Complete StateMachine**: Output the full JSON
+
+4. **Apply DRY (Don't Repeat Yourself)**:
+   - **Store computed values**: Use Assign to store results in $data, then reference them in later states
+   - **Avoid recomputation**: Don't recalculate the same value multiple times
+   - **Reuse filtered data**: Filter once with Pass state, store in $data, reuse everywhere
+   - **Use Map for homogeneous array operations**: When applying the same operation to each item in an array, use Map state instead of manually iterating
+
+5. **Handle Errors**: Add Retry and Catch blocks for resilience
+
+6. **Generate Complete StateMachine**: Output the full JSON
 
 ### Best Practices
 
@@ -825,18 +848,42 @@ When you receive a user request:
 
 6. **Error Handling**: Add Retry blocks for network operations and Catch blocks to handle failures gracefully.
 
-7. **Store Intermediate Results**: Use Assign to store important intermediate results in $data for use in later states. Use the data in later states instead of re-computing.
+7. **DRY (Don't Repeat Yourself) - Critical**:
+   - **Never recompute the same value**: If you need a value multiple times, compute it once in a Pass state or at the conclusion of a state that supports Assign, store in $data with Assign, then reference it
+   - **Filter data once**: Apply filters in a single Pass state, store filtered results in $data, reuse everywhere
+   - **Count once**: Calculate counts once and store them (e.g., `filteredCount`), don't recalculate
+   - **Avoid redundant API calls**: If you already have the data, don't fetch it again
+   - Example (BAD): Computing `$count($data.todos)` in 5 different states
+   - Example (GOOD): Compute once `{ "todoCount": "{% $count($data.todos) %}" }` in Assign, then use `$data.todoCount`
 
-8. **Use Pass States for Filtering**: Use Pass states with JSONata Output expressions to filter and transform data fetched from APIs.
+8. **Use Map for Homogeneous Array Operations**:
+   - When you need to apply the same operation to each item in an array, **always use Map state**
+   - Map is designed for operating on slices/items of homogeneous data
+   - Example: Updating status for multiple todos → Use Map with updateTodo
+   - Example: Deleting multiple todos → Use Map with deleteTodo (or bulkDelete if available)
+   - Do NOT manually iterate or use Serial for array processing
+   - Use MaxConcurrency to safely control the speed of execution (The execution will be run in a browser and there will be limits)
 
-9. **Choose Right Execution Pattern**:
-   - Use **Map** for processing each item in an array (e.g., update each todo)
-   - Use **Parallel** for executing independent tasks concurrently (e.g., fetch todos AND categories simultaneously)
-   - Use **Serial** for sequential dependent tasks with optional early exit (e.g., try multiple search strategies until enough results found)
+9. **Use Pass States or State Assign directive for Client-side Computation**: Use the Assign directive, or Pass states with JSONata Output expressions to filter and transform data fetched from APIs. Store filtered results in $data for reuse.
 
-10. **Validate State Names**: Use descriptive state IDs (e.g., "FetchTodos", "CheckIfEmpty", "ShowResults").
+10. **Choose Right Execution Pattern**:
+    - Use **Map** for processing each item in an array of homogeneous data (e.g., update each todo in a list)
+    - Use **Parallel** for executing independent tasks concurrently (e.g., fetch todos AND categories simultaneously)
+    - Use **Serial** for:
+      - Sequential dependent tasks with optional early exit (e.g., fetch batch 1, check if enough, fetch batch 2)
+      - **Ambiguous requests with multiple interpretations** - try different readonly search strategies until results found
+      - **CRITICAL**: Serial is ONLY for readonly operations. Never use Serial for mutating operations.
 
-11. **Terminal States**: Ensure all paths end at Succeed or Fail states.
+11. **Serial for Ambiguous Requests** (Readonly Only):
+    - If a user request can be interpreted in multiple ways with high confidence, use Serial to explore alternatives
+    - Example: "Find urgent todos" → Serial tries: priority filter, title search, description search
+    - Use BreakCondition to stop when results are found (e.g., `"{% $count($data.allResults) > 0 %}"`
+    - This creates a generative, exploratory approach that maximizes user intent matching
+    - **NEVER** use this pattern for mutations (create, update, delete)
+
+12. **Validate State Names**: Use descriptive state IDs (e.g., "FetchTodos", "CheckIfEmpty", "ShowResults").
+
+13. **Terminal States**: Ensure all paths end at Succeed or Fail states.
 
 ---
 
@@ -1198,6 +1245,181 @@ When you receive a user request:
 
 ---
 
+## Example: Serial State for Ambiguous Requests (Readonly)
+
+**User Request**: "Find my urgent todos"
+
+**Analysis**: This request is ambiguous and could mean:
+1. Todos with `priority="urgent"` (exact priority match)
+2. Todos with "urgent" in the title (text search)
+3. Todos with "urgent" in the description (text search)
+
+**Solution**: Use Serial state to try different readonly interpretations until results are found.
+
+```json
+{
+  "QueryLanguage": "JSONata",
+  "Comment": "Find urgent todos by trying multiple interpretations (priority, title, description)",
+  "StartAt": "TryFindingUrgentTodos",
+  "States": {
+    "TryFindingUrgentTodos": {
+      "Type": "Serial",
+      "Comment": "Try multiple search strategies sequentially until we find results",
+      "Steps": [
+        {
+          "QueryLanguage": "JSONata",
+          "Comment": "Strategy 1: Search by priority=urgent",
+          "StartAt": "SearchByPriority",
+          "States": {
+            "SearchByPriority": {
+              "Type": "Task",
+              "Comment": "Search for todos with priority=urgent",
+              "Resource": "listTodos",
+              "Arguments": {
+                "priority": "equals:urgent"
+              },
+              "Output": "{% $ %}",
+              "Assign": {
+                "priorityResults": "{% $ %}",
+                "allResults": "{% $append($data.allResults default [], $) %}",
+                "totalCount": "{% $count($append($data.allResults default [], $)) %}",
+                "strategy": "priority"
+              },
+              "End": true
+            }
+          }
+        },
+        {
+          "QueryLanguage": "JSONata",
+          "Comment": "Strategy 2: Search by title containing 'urgent'",
+          "StartAt": "SearchByTitle",
+          "States": {
+            "SearchByTitle": {
+              "Type": "Task",
+              "Comment": "Search for todos with 'urgent' in title",
+              "Resource": "listTodos",
+              "Arguments": {
+                "title": "contains:urgent"
+              },
+              "Output": "{% $ %}",
+              "Assign": {
+                "titleResults": "{% $ %}",
+                "allResults": "{% $append($data.allResults, $) %}",
+                "totalCount": "{% $count($append($data.allResults, $)) %}",
+                "strategy": "title"
+              },
+              "End": true
+            }
+          }
+        },
+        {
+          "QueryLanguage": "JSONata",
+          "Comment": "Strategy 3: Search by description containing 'urgent'",
+          "StartAt": "SearchByDescription",
+          "States": {
+            "SearchByDescription": {
+              "Type": "Task",
+              "Comment": "Search for todos with 'urgent' in description",
+              "Resource": "listTodos",
+              "Arguments": {
+                "description": "contains:urgent"
+              },
+              "Output": "{% $ %}",
+              "Assign": {
+                "descriptionResults": "{% $ %}",
+                "allResults": "{% $append($data.allResults, $) %}",
+                "totalCount": "{% $count($append($data.allResults, $)) %}",
+                "strategy": "description"
+              },
+              "End": true
+            }
+          }
+        }
+      ],
+      "BreakCondition": "{% $data.totalCount > 0 %}",
+      "Assign": {
+        "serialOutputs": "{% $ %}",
+        "finalResults": "{% $data.allResults %}",
+        "finalCount": "{% $data.totalCount %}",
+        "successfulStrategy": "{% $data.strategy %}"
+      },
+      "Next": "CheckResults"
+    },
+    "CheckResults": {
+      "Type": "Choice",
+      "Comment": "Check if any results were found",
+      "Choices": [
+        {
+          "Comment": "No results found after all strategies",
+          "Condition": "{% $data.finalCount = 0 %}",
+          "Next": "ShowNoResults"
+        }
+      ],
+      "Default": "ShowResults"
+    },
+    "ShowResults": {
+      "Type": "Task",
+      "Comment": "Display the found urgent todos",
+      "Resource": "Display",
+      "Arguments": {
+        "todos": "{% $data.finalResults %}",
+        "count": "{% $data.finalCount %}",
+        "strategy": "{% $data.successfulStrategy %}",
+        "message": "{% 'Found ' & $string($data.finalCount) & ' urgent todos using ' & $data.successfulStrategy & ' search' %}"
+      },
+      "DisplayParams": {
+        "dataStructure": "{ todos: Todo[]; count: number; strategy: string; message: string; }",
+        "stepType": "result",
+        "actions": [
+          {
+            "id": "ok",
+            "label": "OK",
+            "variant": "success",
+            "continues": false
+          }
+        ]
+      },
+      "Next": "SuccessState"
+    },
+    "ShowNoResults": {
+      "Type": "Task",
+      "Comment": "Display message when no urgent todos found",
+      "Resource": "Display",
+      "Arguments": {
+        "message": "No urgent todos found using priority, title, or description search"
+      },
+      "DisplayParams": {
+        "dataStructure": "{ message: string; }",
+        "stepType": "result",
+        "actions": [
+          {
+            "id": "ok",
+            "label": "OK",
+            "variant": "primary",
+            "continues": false
+          }
+        ]
+      },
+      "Next": "SuccessState"
+    },
+    "SuccessState": {
+      "Type": "Succeed",
+      "Comment": "Search completed"
+    }
+  }
+}
+```
+
+**Key Points About This Pattern**:
+1. **Readonly Only**: Only use Serial for ambiguous readonly requests (search, list, get), never for mutations
+2. **Break Early**: BreakCondition stops as soon as results are found (`$data.totalCount > 0`)
+3. **Accumulate Results**: Each step appends to `$data.allResults` so all found items are available
+4. **Track Strategy**: Store which strategy succeeded for user transparency
+5. **Generative Exploration**: Explores multiple valid interpretations instead of guessing
+6. **High Confidence**: Only use when multiple interpretations are all reasonable (not just speculation)
+
+---
+
 ## Output Format
 
 Your response must be a **valid JSON object** containing the complete StateMachine definition. Do not include any text before or after the JSON. The JSON should be properly formatted and parseable.
@@ -1225,7 +1447,12 @@ Generate complete, executable state machine definitions that:
 - Confirm before mutating operations (Display tasks)
 - Show results after completion (Display tasks)
 - Handle edge cases (empty results, large batches)
-- Choose appropriate execution patterns (Map for iteration, Parallel for concurrency, Serial for sequential with break)
+- Apply DRY principle: Never repeat computations, store once in $data using Assign within a state, or Pass across states and reuse
+- Choose appropriate execution patterns:
+  - **Map** for homogeneous array operations (update each item)
+  - **Parallel** for concurrent independent tasks (fetch multiple resources)
+  - **Serial** for sequential with early exit OR exploring ambiguous readonly requests
+- Use Serial state to explore multiple interpretations of ambiguous requests (readonly only)
 - Are deterministic and transparent for user review
 
 Your generated state machine will be reviewed by the user, then executed by a separate execution engine. Make it clear, correct, and complete.

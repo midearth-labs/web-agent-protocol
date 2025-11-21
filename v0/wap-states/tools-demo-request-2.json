@@ -1,0 +1,151 @@
+{
+  "QueryLanguage": "JSONata",
+  "Comment": "Find urgent todos by trying multiple interpretations (priority, title, description)",
+  "StartAt": "TryFindingUrgentTodos",
+  "States": {
+    "TryFindingUrgentTodos": {
+      "Type": "Serial",
+      "Comment": "Try multiple search strategies sequentially until we find results",
+      "Steps": [
+        {
+          "QueryLanguage": "JSONata",
+          "Comment": "Strategy 1: Search by priority=urgent",
+          "StartAt": "SearchByPriority",
+          "States": {
+            "SearchByPriority": {
+              "Type": "Task",
+              "Comment": "Search for todos with priority=urgent",
+              "Resource": "listTodos",
+              "Arguments": {
+                "priority": "equals:urgent"
+              },
+              "Output": "{% $ %}",
+              "Assign": {
+                "priorityResults": "{% $ %}",
+                "allResults": "{% $append($data.allResults default [], $) %}",
+                "totalCount": "{% $count($append($data.allResults default [], $)) %}",
+                "strategy": "priority"
+              },
+              "End": true
+            }
+          }
+        },
+        {
+          "QueryLanguage": "JSONata",
+          "Comment": "Strategy 2: Search by title containing 'urgent'",
+          "StartAt": "SearchByTitle",
+          "States": {
+            "SearchByTitle": {
+              "Type": "Task",
+              "Comment": "Search for todos with 'urgent' in title",
+              "Resource": "listTodos",
+              "Arguments": {
+                "title": "contains:urgent"
+              },
+              "Output": "{% $ %}",
+              "Assign": {
+                "titleResults": "{% $ %}",
+                "allResults": "{% $append($data.allResults, $) %}",
+                "totalCount": "{% $count($append($data.allResults, $)) %}",
+                "strategy": "title"
+              },
+              "End": true
+            }
+          }
+        },
+        {
+          "QueryLanguage": "JSONata",
+          "Comment": "Strategy 3: Search by description containing 'urgent'",
+          "StartAt": "SearchByDescription",
+          "States": {
+            "SearchByDescription": {
+              "Type": "Task",
+              "Comment": "Search for todos with 'urgent' in description",
+              "Resource": "listTodos",
+              "Arguments": {
+                "description": "contains:urgent"
+              },
+              "Output": "{% $ %}",
+              "Assign": {
+                "descriptionResults": "{% $ %}",
+                "allResults": "{% $append($data.allResults, $) %}",
+                "totalCount": "{% $count($append($data.allResults, $)) %}",
+                "strategy": "description"
+              },
+              "End": true
+            }
+          }
+        }
+      ],
+      "BreakCondition": "{% $data.totalCount > 0 %}",
+      "Assign": {
+        "serialOutputs": "{% $ %}",
+        "finalResults": "{% $data.allResults %}",
+        "finalCount": "{% $data.totalCount %}",
+        "successfulStrategy": "{% $data.strategy %}"
+      },
+      "Next": "CheckResults"
+    },
+    "CheckResults": {
+      "Type": "Choice",
+      "Comment": "Check if any results were found",
+      "Choices": [
+        {
+          "Comment": "No results found after all strategies",
+          "Condition": "{% $data.finalCount = 0 %}",
+          "Next": "ShowNoResults"
+        }
+      ],
+      "Default": "ShowResults"
+    },
+    "ShowResults": {
+      "Type": "Task",
+      "Comment": "Display the found urgent todos",
+      "Resource": "Display",
+      "Arguments": {
+        "todos": "{% $data.finalResults %}",
+        "count": "{% $data.finalCount %}",
+        "strategy": "{% $data.successfulStrategy %}",
+        "message": "{% 'Found ' & $string($data.finalCount) & ' urgent todos using ' & $data.successfulStrategy & ' search' %}"
+      },
+      "DisplayParams": {
+        "dataStructure": "{ todos: Todo[]; count: number; strategy: string; message: string; }",
+        "stepType": "result",
+        "actions": [
+          {
+            "id": "ok",
+            "label": "OK",
+            "variant": "success",
+            "continues": false
+          }
+        ]
+      },
+      "Next": "SuccessState"
+    },
+    "ShowNoResults": {
+      "Type": "Task",
+      "Comment": "Display message when no urgent todos found",
+      "Resource": "Display",
+      "Arguments": {
+        "message": "No urgent todos found using priority, title, or description search"
+      },
+      "DisplayParams": {
+        "dataStructure": "{ message: string; }",
+        "stepType": "result",
+        "actions": [
+          {
+            "id": "ok",
+            "label": "OK",
+            "variant": "primary",
+            "continues": false
+          }
+        ]
+      },
+      "Next": "SuccessState"
+    },
+    "SuccessState": {
+      "Type": "Succeed",
+      "Comment": "Search completed"
+    }
+  }
+}

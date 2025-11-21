@@ -1,0 +1,264 @@
+{
+  "QueryLanguage": "JSONata",
+  "Comment": "Create todos for investor meeting preparation: slides, room booking, and agenda",
+  "StartAt": "ParseMeetingTasks",
+  "States": {
+    "ParseMeetingTasks": {
+      "Type": "Pass",
+      "Comment": "Parse the request and structure the todos to be created",
+      "Output": "{% { todos: [{ title: 'Prepare slides for investor meeting', description: 'Create presentation slides for investor meeting on Nov 25 2025', dueDate: '2025-11-25', priority: 'high' }, { title: 'Book conference room for investor meeting', description: 'Reserve conference room for investor meeting on Nov 25 2025', dueDate: '2025-11-24', priority: 'high' }, { title: 'Send agenda for investor meeting', description: 'Draft and send meeting agenda to attendees', dueDate: '2025-11-23', priority: 'high' }] } %}",
+      "Assign": {
+        "plannedTodos": "{% [{ title: 'Prepare slides for investor meeting', description: 'Create presentation slides for investor meeting on Nov 25 2025', dueDate: '2025-11-25', priority: 'high' }, { title: 'Book conference room for investor meeting', description: 'Reserve conference room for investor meeting on Nov 25 2025', dueDate: '2025-11-24', priority: 'high' }, { title: 'Send agenda for investor meeting', description: 'Draft and send meeting agenda to attendees', dueDate: '2025-11-23', priority: 'high' }] %}",
+        "todoCount": 3
+      },
+      "Next": "ShowPreview"
+    },
+    "ShowPreview": {
+      "Type": "Task",
+      "Comment": "Show preview of todos to be created and request confirmation",
+      "Resource": "Display",
+      "Arguments": {
+        "todos": "{% $data.plannedTodos %}",
+        "count": "{% $data.todoCount %}",
+        "message": "{% 'I will create ' & $string($data.todoCount) & ' todos for the investor meeting preparation' %}"
+      },
+      "DisplayParams": {
+        "dataStructure": "{ todos: Array<{ title: string; description: string; dueDate: string; priority: string; }>; count: number; message: string; }",
+        "stepType": "confirm",
+        "actions": [
+          {
+            "id": "confirm",
+            "label": "{% 'Create ' & $string($data.todoCount) & ' Todos' %}",
+            "variant": "primary",
+            "continues": true
+          },
+          {
+            "id": "cancel",
+            "label": "Cancel",
+            "variant": "secondary",
+            "continues": false
+          }
+        ]
+      },
+      "Assign": {
+        "userAction": "{% $ %}"
+      },
+      "Next": "CheckConfirmation"
+    },
+    "CheckConfirmation": {
+      "Type": "Choice",
+      "Comment": "Check if user confirmed creation",
+      "Choices": [
+        {
+          "Comment": "User confirmed",
+          "Condition": "{% $data.userAction.actionId = 'confirm' %}",
+          "Next": "CreateTodosInParallel"
+        }
+      ],
+      "Default": "ShowCancelled"
+    },
+    "CreateTodosInParallel": {
+      "Type": "Parallel",
+      "Comment": "Create all three todos simultaneously",
+      "Branches": [
+        {
+          "QueryLanguage": "JSONata",
+          "Comment": "Create slides preparation todo",
+          "StartAt": "CreateSlidesTodo",
+          "States": {
+            "CreateSlidesTodo": {
+              "Type": "Task",
+              "Comment": "Create todo for preparing slides",
+              "Resource": "createTodo",
+              "Arguments": {
+                "title": "{% $data.plannedTodos[0].title %}",
+                "description": "{% $data.plannedTodos[0].description %}",
+                "dueDate": "{% $data.plannedTodos[0].dueDate %}",
+                "priority": "{% $data.plannedTodos[0].priority %}"
+              },
+              "Output": "{% $ %}",
+              "End": true,
+              "Retry": [
+                {
+                  "ErrorEquals": ["States.TaskFailed"],
+                  "IntervalSeconds": 2,
+                  "MaxAttempts": 2,
+                  "BackoffRate": 2.0
+                }
+              ]
+            }
+          }
+        },
+        {
+          "QueryLanguage": "JSONata",
+          "Comment": "Create room booking todo",
+          "StartAt": "CreateRoomTodo",
+          "States": {
+            "CreateRoomTodo": {
+              "Type": "Task",
+              "Comment": "Create todo for booking conference room",
+              "Resource": "createTodo",
+              "Arguments": {
+                "title": "{% $data.plannedTodos[1].title %}",
+                "description": "{% $data.plannedTodos[1].description %}",
+                "dueDate": "{% $data.plannedTodos[1].dueDate %}",
+                "priority": "{% $data.plannedTodos[1].priority %}"
+              },
+              "Output": "{% $ %}",
+              "End": true,
+              "Retry": [
+                {
+                  "ErrorEquals": ["States.TaskFailed"],
+                  "IntervalSeconds": 2,
+                  "MaxAttempts": 2,
+                  "BackoffRate": 2.0
+                }
+              ]
+            }
+          }
+        },
+        {
+          "QueryLanguage": "JSONata",
+          "Comment": "Create agenda todo",
+          "StartAt": "CreateAgendaTodo",
+          "States": {
+            "CreateAgendaTodo": {
+              "Type": "Task",
+              "Comment": "Create todo for sending agenda",
+              "Resource": "createTodo",
+              "Arguments": {
+                "title": "{% $data.plannedTodos[2].title %}",
+                "description": "{% $data.plannedTodos[2].description %}",
+                "dueDate": "{% $data.plannedTodos[2].dueDate %}",
+                "priority": "{% $data.plannedTodos[2].priority %}"
+              },
+              "Output": "{% $ %}",
+              "End": true,
+              "Retry": [
+                {
+                  "ErrorEquals": ["States.TaskFailed"],
+                  "IntervalSeconds": 2,
+                  "MaxAttempts": 2,
+                  "BackoffRate": 2.0
+                }
+              ]
+            }
+          }
+        }
+      ],
+      "Assign": {
+        "createdTodos": "{% $ %}",
+        "createdCount": "{% $count($) %}"
+      },
+      "Next": "ShowCreationResults",
+      "Catch": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "ResultPath": "{% $data.error %}",
+          "Next": "ShowCreationError"
+        }
+      ]
+    },
+    "ShowCreationResults": {
+      "Type": "Task",
+      "Comment": "Display the created todos",
+      "Resource": "Display",
+      "Arguments": {
+        "todos": "{% $data.createdTodos %}",
+        "count": "{% $data.createdCount %}",
+        "message": "{% 'Successfully created ' & $string($data.createdCount) & ' todos for investor meeting preparation' %}"
+      },
+      "DisplayParams": {
+        "dataStructure": "{ todos: Todo[]; count: number; message: string; }",
+        "stepType": "result",
+        "actions": [
+          {
+            "id": "ok",
+            "label": "OK",
+            "variant": "success",
+            "continues": false
+          }
+        ]
+      },
+      "Next": "SuccessState"
+    },
+    "ShowCancelled": {
+      "Type": "Task",
+      "Comment": "Show cancellation message",
+      "Resource": "Display",
+      "Arguments": {
+        "message": "Todo creation cancelled by user"
+      },
+      "DisplayParams": {
+        "dataStructure": "{ message: string; }",
+        "stepType": "result",
+        "actions": [
+          {
+            "id": "ok",
+            "label": "OK",
+            "variant": "secondary",
+            "continues": false
+          }
+        ]
+      },
+      "Next": "CancelledState"
+    },
+    "ShowCreationError": {
+      "Type": "Task",
+      "Comment": "Display error message",
+      "Resource": "Display",
+      "Arguments": {
+        "error": "{% $data.error %}",
+        "message": "Failed to create one or more todos. Please try again."
+      },
+      "DisplayParams": {
+        "dataStructure": "{ error: any; message: string; }",
+        "stepType": "error",
+        "actions": [
+          {
+            "id": "retry",
+            "label": "Retry",
+            "variant": "primary",
+            "continues": true
+          },
+          {
+            "id": "cancel",
+            "label": "Cancel",
+            "variant": "secondary",
+            "continues": false
+          }
+        ]
+      },
+      "Assign": {
+        "errorAction": "{% $ %}"
+      },
+      "Next": "HandleErrorAction"
+    },
+    "HandleErrorAction": {
+      "Type": "Choice",
+      "Comment": "Handle user response to error",
+      "Choices": [
+        {
+          "Comment": "User chose to retry",
+          "Condition": "{% $data.errorAction.actionId = 'retry' %}",
+          "Next": "CreateTodosInParallel"
+        }
+      ],
+      "Default": "FailState"
+    },
+    "CancelledState": {
+      "Type": "Fail",
+      "Error": "UserCancelled",
+      "Cause": "User cancelled todo creation"
+    },
+    "FailState": {
+      "Type": "Fail",
+      "Error": "CreationFailed",
+      "Cause": "Failed to create todos for meeting preparation"
+    },
+    "SuccessState": {
+      "Type": "Succeed",
+      "Comment": "Successfully created all meeting preparation todos"
+    }
+  }
+}

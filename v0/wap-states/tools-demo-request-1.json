@@ -1,0 +1,144 @@
+{
+  "QueryLanguage": "JSONata",
+  "Comment": "Find todos with urgent priority",
+  "StartAt": "FetchUrgentTodos",
+  "States": {
+    "FetchUrgentTodos": {
+      "Type": "Task",
+      "Comment": "Fetch todos filtered by priority=urgent",
+      "Resource": "listTodos",
+      "Arguments": {
+        "priority": "equals:urgent"
+      },
+      "Output": "{% $ %}",
+      "Assign": {
+        "urgentTodos": "{% $ %}",
+        "todoCount": "{% $count($) %}"
+      },
+      "Next": "CheckResults",
+      "Retry": [
+        {
+          "ErrorEquals": ["States.TaskFailed", "States.Timeout"],
+          "IntervalSeconds": 2,
+          "MaxAttempts": 3,
+          "BackoffRate": 2.0
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "ResultPath": "{% $data.error %}",
+          "Next": "ShowError"
+        }
+      ]
+    },
+    "CheckResults": {
+      "Type": "Choice",
+      "Comment": "Check if any urgent todos were found",
+      "Choices": [
+        {
+          "Comment": "No urgent todos found",
+          "Condition": "{% $data.todoCount = 0 %}",
+          "Next": "ShowNoResults"
+        }
+      ],
+      "Default": "ShowResults"
+    },
+    "ShowResults": {
+      "Type": "Task",
+      "Comment": "Display the urgent todos",
+      "Resource": "Display",
+      "Arguments": {
+        "todos": "{% $data.urgentTodos %}",
+        "count": "{% $data.todoCount %}",
+        "message": "{% 'Found ' & $string($data.todoCount) & ' todos with urgent priority' %}"
+      },
+      "DisplayParams": {
+        "dataStructure": "{ todos: Todo[]; count: number; message: string; }",
+        "stepType": "result",
+        "actions": [
+          {
+            "id": "ok",
+            "label": "OK",
+            "variant": "success",
+            "continues": false
+          }
+        ]
+      },
+      "Next": "SuccessState"
+    },
+    "ShowNoResults": {
+      "Type": "Task",
+      "Comment": "Display message when no urgent todos found",
+      "Resource": "Display",
+      "Arguments": {
+        "message": "No todos found with urgent priority"
+      },
+      "DisplayParams": {
+        "dataStructure": "{ message: string; }",
+        "stepType": "result",
+        "actions": [
+          {
+            "id": "ok",
+            "label": "OK",
+            "variant": "primary",
+            "continues": false
+          }
+        ]
+      },
+      "Next": "SuccessState"
+    },
+    "ShowError": {
+      "Type": "Task",
+      "Comment": "Display error message",
+      "Resource": "Display",
+      "Arguments": {
+        "error": "{% $data.error %}",
+        "message": "Failed to fetch todos. Please try again."
+      },
+      "DisplayParams": {
+        "dataStructure": "{ error: any; message: string; }",
+        "stepType": "error",
+        "actions": [
+          {
+            "id": "retry",
+            "label": "Retry",
+            "variant": "primary",
+            "continues": true
+          },
+          {
+            "id": "cancel",
+            "label": "Cancel",
+            "variant": "secondary",
+            "continues": false
+          }
+        ]
+      },
+      "Assign": {
+        "userAction": "{% $ %}"
+      },
+      "Next": "HandleErrorAction"
+    },
+    "HandleErrorAction": {
+      "Type": "Choice",
+      "Comment": "Handle user response to error",
+      "Choices": [
+        {
+          "Comment": "User chose to retry",
+          "Condition": "{% $data.userAction.actionId = 'retry' %}",
+          "Next": "FetchUrgentTodos"
+        }
+      ],
+      "Default": "FailState"
+    },
+    "FailState": {
+      "Type": "Fail",
+      "Error": "FetchFailed",
+      "Cause": "Failed to fetch urgent todos"
+    },
+    "SuccessState": {
+      "Type": "Succeed",
+      "Comment": "Successfully retrieved urgent todos"
+    }
+  }
+}

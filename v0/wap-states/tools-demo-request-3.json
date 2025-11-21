@@ -1,0 +1,168 @@
+{
+  "QueryLanguage": "JSONata",
+  "Comment": "Export todos due in next 5 weeks as CSV",
+  "StartAt": "CalculateDateRange",
+  "States": {
+    "CalculateDateRange": {
+      "Type": "Pass",
+      "Comment": "Calculate date range: today to 5 weeks from now",
+      "Output": "{% { today: $now(), endDate: $addDays($now(), 35) } %}",
+      "Assign": {
+        "today": "{% $now() %}",
+        "endDate": "{% $addDays($now(), 35) %}",
+        "dateRange": "next 5 weeks"
+      },
+      "Next": "FetchTodosInRange"
+    },
+    "FetchTodosInRange": {
+      "Type": "Task",
+      "Comment": "Fetch todos with due date before end date",
+      "Resource": "listTodos",
+      "Arguments": {
+        "dueDateBefore": "{% $data.endDate %}"
+      },
+      "Output": "{% $ %}",
+      "Assign": {
+        "todos": "{% $ %}",
+        "todoCount": "{% $count($) %}"
+      },
+      "Next": "CheckResults",
+      "Retry": [
+        {
+          "ErrorEquals": ["States.TaskFailed", "States.Timeout"],
+          "IntervalSeconds": 2,
+          "MaxAttempts": 3,
+          "BackoffRate": 2.0
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "ResultPath": "{% $data.error %}",
+          "Next": "ShowError"
+        }
+      ]
+    },
+    "CheckResults": {
+      "Type": "Choice",
+      "Comment": "Check if any todos were found",
+      "Choices": [
+        {
+          "Comment": "No todos found in date range",
+          "Condition": "{% $data.todoCount = 0 %}",
+          "Next": "ShowNoResults"
+        }
+      ],
+      "Default": "TransformToCSV"
+    },
+    "TransformToCSV": {
+      "Type": "Pass",
+      "Comment": "Transform JSON todos to CSV format using JSONata",
+      "Output": "{% $data.todos ~> | $ | { 'csv': 'id,title,description,status,dueDate,priority,createdAt,modifiedAt\\n' & $join($map($, function($todo) { $todo.id & ',' & $todo.title & ',' & ($todo.description default '') & ',' & $todo.status & ',' & ($todo.dueDate default '') & ',' & $todo.priority & ',' & $todo.createdAt & ',' & $todo.modifiedAt }), '\\n') } %}",
+      "Assign": {
+        "csvData": "{% 'id,title,description,status,dueDate,priority,createdAt,modifiedAt\\n' & $join($map($data.todos, function($todo) { $todo.id & ',' & $todo.title & ',' & ($todo.description default '') & ',' & $todo.status & ',' & ($todo.dueDate default '') & ',' & $todo.priority & ',' & $todo.createdAt & ',' & $todo.modifiedAt }), '\\n') %}",
+        "filename": "{% 'todos-next-5-weeks-' & $substring($data.today, 0, 10) & '.csv' %}"
+      },
+      "Next": "DisplayCSV"
+    },
+    "DisplayCSV": {
+      "Type": "Task",
+      "Comment": "Display CSV data for download",
+      "Resource": "Display",
+      "Arguments": {
+        "csvData": "{% $data.csvData %}",
+        "filename": "{% $data.filename %}",
+        "count": "{% $data.todoCount %}",
+        "dateRange": "{% $data.dateRange %}",
+        "message": "{% 'Generated CSV export with ' & $string($data.todoCount) & ' todos due in the ' & $data.dateRange %}"
+      },
+      "DisplayParams": {
+        "dataStructure": "{ csvData: string; filename: string; count: number; dateRange: string; message: string; }",
+        "stepType": "result",
+        "actions": [
+          {
+            "id": "download",
+            "label": "Download CSV",
+            "variant": "primary",
+            "continues": false
+          }
+        ]
+      },
+      "Next": "SuccessState"
+    },
+    "ShowNoResults": {
+      "Type": "Task",
+      "Comment": "Display message when no todos found",
+      "Resource": "Display",
+      "Arguments": {
+        "message": "{% 'No todos found due in the ' & $data.dateRange %}",
+        "dateRange": "{% $data.dateRange %}"
+      },
+      "DisplayParams": {
+        "dataStructure": "{ message: string; dateRange: string; }",
+        "stepType": "result",
+        "actions": [
+          {
+            "id": "ok",
+            "label": "OK",
+            "variant": "primary",
+            "continues": false
+          }
+        ]
+      },
+      "Next": "SuccessState"
+    },
+    "ShowError": {
+      "Type": "Task",
+      "Comment": "Display error message",
+      "Resource": "Display",
+      "Arguments": {
+        "error": "{% $data.error %}",
+        "message": "Failed to fetch todos. Please try again."
+      },
+      "DisplayParams": {
+        "dataStructure": "{ error: any; message: string; }",
+        "stepType": "error",
+        "actions": [
+          {
+            "id": "retry",
+            "label": "Retry",
+            "variant": "primary",
+            "continues": true
+          },
+          {
+            "id": "cancel",
+            "label": "Cancel",
+            "variant": "secondary",
+            "continues": false
+          }
+        ]
+      },
+      "Assign": {
+        "userAction": "{% $ %}"
+      },
+      "Next": "HandleErrorAction"
+    },
+    "HandleErrorAction": {
+      "Type": "Choice",
+      "Comment": "Handle user response to error",
+      "Choices": [
+        {
+          "Comment": "User chose to retry",
+          "Condition": "{% $data.userAction.actionId = 'retry' %}",
+          "Next": "FetchTodosInRange"
+        }
+      ],
+      "Default": "FailState"
+    },
+    "FailState": {
+      "Type": "Fail",
+      "Error": "ExportFailed",
+      "Cause": "Failed to export todos to CSV"
+    },
+    "SuccessState": {
+      "Type": "Succeed",
+      "Comment": "Successfully exported todos to CSV"
+    }
+  }
+}
