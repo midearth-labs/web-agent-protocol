@@ -205,7 +205,7 @@ type RetryAndCatchState = {
   Catch?: Catch[]; // Error handlers (matches ASL)
 }
 
-// State types (matches ASL)
+// State types (matches ASL + WAP extensions)
 type StateType = 
   | "Task" // Union of ToolTask and DisplayTask
   | "Choice"
@@ -215,6 +215,7 @@ type StateType =
   | "Fail"
   | "Parallel"
   | "Map"
+  | "Serial" // WAP extension: sequential execution with optional break
 
 // Discriminated union of subtypes by the Type property
 type State = 
@@ -226,6 +227,7 @@ type State =
   | Fail
   | Parallel
   | Map
+  | Serial
 
 // A Task state must set either the End field to true if the state ends the execution, or must provide a state in the Next field that is run when the Task state is complete.
 type NextStateProgression = { Next: string }
@@ -378,6 +380,38 @@ type Parallel = BaseState & ArgumentsReceivingState & OutputEmittingState & Next
   Branches: Array<StateMachine>; // Array of state machines to execute in parallel (matches ASL)
   // Uses Assign from base State to store combined results in data
 }
+
+// Serial state (WAP extension)
+// Executes multiple state machines sequentially (single-threaded), similar to a for loop
+// Unlike Parallel (which uses concurrency/threads), Serial ensures:
+// 1. Step N completes fully before Step N+1 begins
+// 2. Each step can access results from all previous steps via $data
+// 3. Optional BreakCondition allows early termination (like a break statement)
+// 
+// Use cases:
+// - Sequential search queries (try query A, then B, then C until criteria met)
+// - Progressive data fetching (fetch batch 1, check if enough, fetch batch 2, etc.)
+// - Multi-step validation with early exit
+//
+// The state output is an array containing the output of each executed step (steps after break are not included)
+// Each step receives:
+// - Previous steps' results via $data (accumulated using Assign)
+// - Index of current step via $index (0-based)
+// - Total number of steps via $stepCount
+type Serial = BaseState & ArgumentsReceivingState & OutputEmittingState & NextOrEndStateProgression & RetryAndCatchState & {
+  Type: "Serial";
+  Steps: Array<StateMachine>; // Array of state machines to execute sequentially (one completes before next starts)
+  BreakCondition?: StringOrJSONataExpression; // Optional early termination condition evaluated after each step
+  // The BreakCondition is evaluated after each step completes
+  // If condition evaluates to true, execution stops and proceeds to Next/End state
+  // If condition is false or undefined, execution continues to next step
+  // If no BreakCondition is provided, all steps execute
+  // Example: "{% $data.totalResults >= 20 or $index >= 4 %}" (stop at 20 results OR 5 tries)
+  
+  // Uses Arguments from base State for initial input to first step
+  // Uses Assign from base State to accumulate results across steps
+  // Uses Output from base State to transform final output array
+}
 ```
 
 ### Error Handling
@@ -461,49 +495,6 @@ type ContextFunction = {
 
 // Example custom functions
 const DEFAULT_CONTEXT_FUNCTIONS: ContextFunctionRegistry = {
-  "now": {
-    description: "Get current date/time as ISO string",
-    parameters: {},
-    returns: {
-      type: "string",
-      description: "Current date/time in ISO 8601 format"
-    },
-    implementation: "(args, context) => new Date().toISOString()"
-  },
-  
-  "addDays": {
-    description: "Add days to a date",
-    parameters: {
-      date: {
-        type: "string",
-        description: "ISO date string"
-      },
-      days: {
-        type: "number",
-        description: "Number of days to add (can be negative)"
-      }
-    },
-    returns: {
-      type: "string",
-      description: "New date as ISO string"
-    },
-    implementation: "(args, context) => { const d = new Date(args.date); d.setDate(d.getDate() + args.days); return d.toISOString(); }"
-  },
-  
-  "isPast": {
-    description: "Check if a date is in the past",
-    parameters: {
-      date: {
-        type: "string",
-        description: "ISO date string to check"
-      }
-    },
-    returns: {
-      type: "boolean",
-      description: "True if date is in the past"
-    },
-    implementation: "(args, context) => new Date(args.date) < new Date()"
-  }
 };
 ```
 
@@ -860,6 +851,175 @@ type JSONataContext = {
 }
 ```
 
+### Example: Serial Execution with Break Condition
+
+This example shows Serial state executing multiple search queries sequentially, stopping when either 20 results are accumulated OR 5 search attempts have been made (whichever comes first):
+
+```json
+{
+  "SearchOrdersSequentially": {
+    "Type": "Serial",
+    "Comment": "Try multiple search queries sequentially until we have enough results",
+    "Steps": [
+      {
+        "QueryLanguage": "JSONata",
+        "Comment": "Search by order ID",
+        "StartAt": "SearchByOrderId",
+        "States": {
+          "SearchByOrderId": {
+            "Type": "Task",
+            "Comment": "Search for orders by ID",
+            "Resource": "searchOrders",
+            "Arguments": {
+              "query": "{% $rootState.Input.orderId %}",
+              "searchField": "orderId"
+            },
+            "Output": "{% $ %}",
+            "Assign": {
+              "searchResults_0": "{% $ %}",
+              "totalResults": "{% $count($append($data.totalResults default [], $.results)) %}",
+              "allResults": "{% $append($data.allResults default [], $.results) %}"
+            },
+            "End": true
+          }
+        }
+      },
+      {
+        "QueryLanguage": "JSONata",
+        "Comment": "Search by customer name",
+        "StartAt": "SearchByCustomerName",
+        "States": {
+          "SearchByCustomerName": {
+            "Type": "Task",
+            "Comment": "Search for orders by customer name",
+            "Resource": "searchOrders",
+            "Arguments": {
+              "query": "{% $rootState.Input.customerName %}",
+              "searchField": "customerName"
+            },
+            "Output": "{% $ %}",
+            "Assign": {
+              "searchResults_1": "{% $ %}",
+              "totalResults": "{% $count($append($data.allResults, $.results)) %}",
+              "allResults": "{% $append($data.allResults, $.results) %}"
+            },
+            "End": true
+          }
+        }
+      },
+      {
+        "QueryLanguage": "JSONata",
+        "Comment": "Search by email",
+        "StartAt": "SearchByEmail",
+        "States": {
+          "SearchByEmail": {
+            "Type": "Task",
+            "Comment": "Search for orders by email",
+            "Resource": "searchOrders",
+            "Arguments": {
+              "query": "{% $rootState.Input.email %}",
+              "searchField": "email"
+            },
+            "Output": "{% $ %}",
+            "Assign": {
+              "searchResults_2": "{% $ %}",
+              "totalResults": "{% $count($append($data.allResults, $.results)) %}",
+              "allResults": "{% $append($data.allResults, $.results) %}"
+            },
+            "End": true
+          }
+        }
+      },
+      {
+        "QueryLanguage": "JSONata",
+        "Comment": "Search by phone number",
+        "StartAt": "SearchByPhone",
+        "States": {
+          "SearchByPhone": {
+            "Type": "Task",
+            "Comment": "Search for orders by phone",
+            "Resource": "searchOrders",
+            "Arguments": {
+              "query": "{% $rootState.Input.phone %}",
+              "searchField": "phone"
+            },
+            "Output": "{% $ %}",
+            "Assign": {
+              "searchResults_3": "{% $ %}",
+              "totalResults": "{% $count($append($data.allResults, $.results)) %}",
+              "allResults": "{% $append($data.allResults, $.results) %}"
+            },
+            "End": true
+          }
+        }
+      },
+      {
+        "QueryLanguage": "JSONata",
+        "Comment": "Search by address",
+        "StartAt": "SearchByAddress",
+        "States": {
+          "SearchByAddress": {
+            "Type": "Task",
+            "Comment": "Search for orders by shipping address",
+            "Resource": "searchOrders",
+            "Arguments": {
+              "query": "{% $rootState.Input.address %}",
+              "searchField": "shippingAddress"
+            },
+            "Output": "{% $ %}",
+            "Assign": {
+              "searchResults_4": "{% $ %}",
+              "totalResults": "{% $count($append($data.allResults, $.results)) %}",
+              "allResults": "{% $append($data.allResults, $.results) %}"
+            },
+            "End": true
+          }
+        }
+      }
+    ],
+    "BreakCondition": "{% $data.totalResults >= 20 or $index >= 4 %}",
+    "Assign": {
+      "serialStepOutputs": "{% $ %}",
+      "finalResultCount": "{% $data.totalResults %}"
+    },
+    "Next": "DeduplicateResults"
+  },
+  "DeduplicateResults": {
+    "Type": "Pass",
+    "Comment": "Remove duplicate orders from combined results",
+    "Output": "{% $data | { uniqueOrders: $distinct($data.allResults, function($order) { $order.id }), searchesPerformed: $index + 1 } %}",
+    "Assign": {
+      "uniqueOrders": "{% $distinct($data.allResults, function($order) { $order.id }) %}",
+      "uniqueCount": "{% $count($distinct($data.allResults, function($order) { $order.id })) %}",
+      "searchesPerformed": "{% $index + 1 %}"
+    },
+    "Next": "ShowResults"
+  }
+}
+```
+
+**Key Points About Serial State:**
+
+1. **Single-Threaded Execution**: Each step fully completes before the next begins (unlike Parallel)
+2. **Accumulated Context**: Each step can access results from previous steps via `$data`
+3. **Early Termination**: Optional `BreakCondition` is evaluated after each step completes
+4. **Loop Variables**: 
+   - `$index` - Current step index (0-based, e.g., 0 for first step, 1 for second, etc.)
+   - `$stepCount` - Total number of steps defined
+5. **Break Condition**: In the example above, execution stops when:
+   - 20 or more results accumulated (`$data.totalResults >= 20`), OR
+   - 5 attempts completed (`$index >= 4`, meaning steps 0-4 have executed)
+   - If condition is true, proceeds to the Serial state's `Next` field
+6. **Output Array**: Serial state output is an array of each executed step's output (excluding steps after break)
+
+**Comparison: Serial vs Parallel vs Map**
+
+| State Type | Execution Model | Use Case |
+|------------|----------------|----------|
+| **Parallel** | Concurrent (multi-threaded) | Execute independent tasks simultaneously (e.g., fetch todos AND categories at same time) |
+| **Serial** | Sequential (single-threaded) | Execute dependent tasks in order with optional early exit (e.g., try searches until enough results) |
+| **Map** | Iterate over array | Process each item in a collection (e.g., update status of each todo in a list) |
+
 ---
 
 ## Resource Links
@@ -894,7 +1054,7 @@ The WAP Workflow States Language provides a declarative, transparent, and effici
 2. **Determinism**: Fixed execution path after confirmation
 3. **Safety**: Sandboxed execution environment
 4. **Efficiency**: Single LLM call for plan generation
-5. **Flexibility**: Support for complex workflows with parallel execution, error handling, and user interactions
+5. **Flexibility**: Support for complex workflows with parallel execution, sequential execution with early termination (Serial), error handling, and user interactions
 
-The design is fully compatible with ASL naming conventions while restricting it to JSONata-only (no JSONPath) data transformation capabilities.
+The design is fully compatible with ASL naming conventions while restricting it to JSONata-only (no JSONPath) data transformation capabilities. WAP extends ASL with the Serial state type for single-threaded sequential execution with optional break conditions.
 

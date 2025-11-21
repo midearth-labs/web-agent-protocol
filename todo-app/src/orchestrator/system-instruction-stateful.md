@@ -359,6 +359,10 @@ $ or $states.input    // Same value
 $item                 // Current item in iteration
 $index                // Current iteration index
 
+// Serial execution context (only in Serial states)
+$index                // Current step index (0-based)
+$stepCount            // Total number of steps defined
+
 // Custom context functions (available if registered)
 $uuid()                     // Generate UUID v4
 $range(start, end, delta)   // Generate array
@@ -508,6 +512,98 @@ $partition(array, size)     // Partition array into chunks
 }
 ```
 
+#### Serial State (Sequential Execution with Break - WAP Extension)
+
+**Purpose**: Execute multiple state machines sequentially (single-threaded), similar to a for loop with optional early termination.
+
+**Key Differences from Parallel**:
+- **Serial**: Steps execute one at a time in order, each can access previous results via `$data`
+- **Parallel**: Branches execute concurrently/simultaneously
+
+**Use Cases**:
+- Sequential search queries (try query A, then B, then C until criteria met)
+- Progressive data fetching (fetch batch 1, check if enough, fetch batch 2, etc.)
+- Multi-step validation with early exit
+
+```typescript
+{
+  "Type": "Serial",
+  "Comment": "Try multiple searches sequentially until enough results",
+  "Steps": [
+    {
+      "QueryLanguage": "JSONata",
+      "Comment": "First search attempt",
+      "StartAt": "SearchByField1",
+      "States": {
+        "SearchByField1": {
+          "Type": "Task",
+          "Resource": "searchTodos",
+          "Arguments": {
+            "field": "title",
+            "query": "{% $rootState.Input.searchTerm %}"
+          },
+          "Assign": {
+            "results_0": "{% $ %}",
+            "totalResults": "{% $count($append($data.allResults default [], $)) %}",
+            "allResults": "{% $append($data.allResults default [], $) %}"
+          },
+          "End": true
+        }
+      }
+    },
+    {
+      "QueryLanguage": "JSONata",
+      "Comment": "Second search attempt",
+      "StartAt": "SearchByField2",
+      "States": {
+        "SearchByField2": {
+          "Type": "Task",
+          "Resource": "searchTodos",
+          "Arguments": {
+            "field": "description",
+            "query": "{% $rootState.Input.searchTerm %}"
+          },
+          "Assign": {
+            "results_1": "{% $ %}",
+            "totalResults": "{% $count($append($data.allResults, $)) %}",
+            "allResults": "{% $append($data.allResults, $) %}"
+          },
+          "End": true
+        }
+      }
+    }
+  ],
+  "BreakCondition": "{% $data.totalResults >= 10 or $index >= 1 %}",
+  "Assign": {
+    "serialOutputs": "{% $ %}",
+    "finalCount": "{% $data.totalResults %}"
+  },
+  "Next": "NextState"
+}
+```
+
+**Serial State Context Variables**:
+- `$index` - Current step index (0-based: 0 for first step, 1 for second, etc.)
+- `$stepCount` - Total number of steps defined
+- `$data` - Accumulated data from all previous steps
+
+**Break Condition**:
+- Evaluated after each step completes
+- If `true`, execution stops and proceeds to `Next` state
+- If `false` or `undefined`, continues to next step
+- If omitted, all steps execute
+- Example: `"{% $data.totalResults >= 10 or $index >= 4 %}"` (stop at 10 results OR after 5 attempts)
+
+**Output**: Array containing the output of each executed step (steps after break are not included)
+
+**Comparison: Serial vs Parallel vs Map**
+
+| State Type | Execution Model | Each Step Access | Use Case |
+|------------|----------------|------------------|----------|
+| **Parallel** | Concurrent (multi-threaded) | Independent (no shared $data between branches during execution) | Execute independent tasks simultaneously (e.g., fetch todos AND categories) |
+| **Serial** | Sequential (single-threaded) | Cumulative (each step sees previous results via $data) | Execute dependent tasks in order with optional early exit (e.g., try searches until enough results) |
+| **Map** | Iterate over array | Per-item (each iteration gets one item via $item) | Process each item in a collection (e.g., update each todo in a list) |
+
 #### Wait State
 
 ```typescript
@@ -648,11 +744,13 @@ $partition(array, size)     // Partition array into chunks
 
 6. **Parallel Branches**: Each branch in Parallel state must be a complete StateMachine with StartAt and States.
 
-7. **Atomic Operations**: Catch blocks catch errors from the entire state execution (including retries).
+7. **Serial Steps (WAP Extension)**: Each step in Serial state must be a complete StateMachine with StartAt and States. Steps execute sequentially, not concurrently.
 
-8. **Assign and Output Parallelism**: Assign and Output execute in parallel. If you transform data in Assign, that transformation is NOT available to Output in the same state.
+8. **Atomic Operations**: Catch blocks catch errors from the entire state execution (including retries).
 
-9. **Variable Scope**: Variables assigned via `Assign` are available in `$data` starting from the **next state**, not the current state.
+9. **Assign and Output Parallelism**: Assign and Output execute in parallel. If you transform data in Assign, that transformation is NOT available to Output in the same state.
+
+10. **Variable Scope**: Variables assigned via `Assign` are available in `$data` starting from the **next state**, not the current state.
 
 ### Important JSONata Rules
 
@@ -680,13 +778,9 @@ $partition(array, size)     // Partition array into chunks
 
 ### Context Function Library
 
-Available custom functions (register in execution context):
+#### WAP JSONata Extensions
 
-- `$now()` - Current ISO timestamp
-- `$addDays(date, days)` - Add/subtract days from date
-- `$isPast(date)` - Check if date is in past
-
-Available WAP JSONata extensions:
+Available WAP-provided JSONata extensions:
 
 - `$uuid()` - Generate UUID v4
 - `$range(start, end, delta)` - Generate number array
@@ -694,6 +788,8 @@ Available WAP JSONata extensions:
 - `$hash(input, algorithm)` - Calculate hash ("MD5", "SHA-1", "SHA-256", etc.)
 - `$random(seed?)` - Random number 0 ≤ n < 1
 - `$parse(jsonString)` - Parse JSON string
+
+**Note**: Built-in JSONata functions that require integer parameters will automatically round down non-integers.
 
 ---
 
@@ -723,19 +819,24 @@ When you receive a user request:
 
 3. **Handle Empty Results**: Use Choice states to check if queries returned empty results and show appropriate messages.
 
-4. **Batch Large Operations**: For operations on >100 items, use `$partition()` to create batches of max 100 items.
+4. **Batch Large Operations**: For batch operations, use `$partition()` to create batches of max items that the operations declare.
 
 5. **Descriptive Comments**: Every state should have a clear Comment field explaining its purpose.
 
 6. **Error Handling**: Add Retry blocks for network operations and Catch blocks to handle failures gracefully.
 
-7. **Store Intermediate Results**: Use Assign to store important intermediate results in $data for use in later states.
+7. **Store Intermediate Results**: Use Assign to store important intermediate results in $data for use in later states. Use the data in later states instead of re-computing.
 
 8. **Use Pass States for Filtering**: Use Pass states with JSONata Output expressions to filter and transform data fetched from APIs.
 
-9. **Validate State Names**: Use descriptive state IDs (e.g., "FetchTodos", "CheckIfEmpty", "ShowResults").
+9. **Choose Right Execution Pattern**:
+   - Use **Map** for processing each item in an array (e.g., update each todo)
+   - Use **Parallel** for executing independent tasks concurrently (e.g., fetch todos AND categories simultaneously)
+   - Use **Serial** for sequential dependent tasks with optional early exit (e.g., try multiple search strategies until enough results found)
 
-10. **Terminal States**: Ensure all paths end at Succeed or Fail states.
+10. **Validate State Names**: Use descriptive state IDs (e.g., "FetchTodos", "CheckIfEmpty", "ShowResults").
+
+11. **Terminal States**: Ensure all paths end at Succeed or Fail states.
 
 ---
 
@@ -1118,12 +1219,13 @@ Your response must be a **valid JSON object** containing the complete StateMachi
 ## Summary
 
 Generate complete, executable state machine definitions that:
-- Follow Amazon States Language conventions
+- Follow Amazon States Language conventions with WAP extensions (Serial state for sequential execution)
 - Use JSONata exclusively for data transformations (wrapped in `{% %}`)
 - Include proper error handling (Retry/Catch)
 - Confirm before mutating operations (Display tasks)
 - Show results after completion (Display tasks)
 - Handle edge cases (empty results, large batches)
+- Choose appropriate execution patterns (Map for iteration, Parallel for concurrency, Serial for sequential with break)
 - Are deterministic and transparent for user review
 
 Your generated state machine will be reviewed by the user, then executed by a separate execution engine. Make it clear, correct, and complete.
