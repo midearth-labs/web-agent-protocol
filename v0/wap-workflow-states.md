@@ -317,7 +317,7 @@ type Choice = BaseState & NextStateProgression & {
 // Choice rule with JSONata condition
 type ChoiceRule = {
   Comment: string; // 
-  Condition: StringOrJSONataExpression; // JSONata expression that evaluates to boolean (matches ASL)
+  Condition: JSONataExpression; // JSONata expression that evaluates to boolean (matches ASL)
   // Example: "{% $data.filteredCount = 0 %}"
 } & NextStateProgression
 
@@ -401,7 +401,7 @@ type Parallel = BaseState & ArgumentsReceivingState & OutputEmittingState & Next
 type Serial = BaseState & ArgumentsReceivingState & OutputEmittingState & NextOrEndStateProgression & RetryAndCatchState & {
   Type: "Serial";
   Steps: Array<StateMachine>; // Array of state machines to execute sequentially (one completes before next starts)
-  BreakCondition?: StringOrJSONataExpression; // Optional early termination condition evaluated after each step
+  BreakCondition?: JSONataExpression; // Optional early termination condition evaluated after each step
   // The BreakCondition is evaluated after each step completes
   // If condition evaluates to true, execution stops and proceeds to Next/End state
   // If condition is false or undefined, execution continues to next step

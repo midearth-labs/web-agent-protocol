@@ -9,7 +9,7 @@
 
 ## Overview
 
-This document showcases WAP V2 (Web Agent Protocol Version 2) with the generative plan-based approach (Plan-then-execute Model) using Amazon States Language (ASL) with JSONata. Unlike the previous agentic approach that required multiple LLM round-trips, WAPV2 generates complete, deterministic execution plans as state machines in a single LLM call. The showcase is done with a sample simple Todo app but it's in no way restricted to simple use-cases.
+This document showcases WAP V2 (Web Agent Protocol Version 2) with the generative plan-based approach [Plan-and-execute Model](https://blog.langchain.com/planning-agents/) using Amazon States Language (ASL) with JSONata. Unlike the previous agentic approach that required multiple LLM round-trips, WAPV2 generates complete, deterministic execution plans as state machines in a single LLM call. The showcase is done with a sample simple Todo app but it's in no way restricted to simple use-cases.
 
 **Key Innovation**: The LLM analyzes the user request and generates a complete state machine definition that is then executed deterministically by a separate execution engine. This provides transparency (users can review the plan before execution), efficiency (single LLM call), and determinism (fixed execution path after confirmation).
 
