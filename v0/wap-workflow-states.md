@@ -143,6 +143,14 @@ Use "State" terminology (matches ASL exactly)
 #### 3. **Parameters Field**
 ASL uses "Parameters" field which works with JSONPath. Since WAP is JSONata-only, we use "Arguments" field instead (ASL JSONata mode standard).
 
+#### 10. **Data Management (ASL Standard)**
+WAP uses pure ASL semantics for data management:
+- Variables assigned via `Assign` become top-level variables accessible by name in subsequent states
+- Example: `Assign: { "count": 5 }` → accessible as `$count` (not `$data.count`)
+- Runtime context is accessed via `$states.context` (ASL standard)
+- State input/output flow is the primary data management mechanism (ASL standard)
+- This ensures full ASL compliance and eliminates WAP-specific data management extensions
+
 #### 4. **Assign Field (ASL Standard)**
 Fully ASL-compatible variable assignment using JSONata:
 - Any state except Succeed and Fail MAY have an "Assign" field at the state's top level
@@ -177,12 +185,24 @@ WAP intentionally omits these ASL features:
 - **Retry.MaxDelaySeconds**: Cap for exponential backoff (ASL added Sept 2023)
 - **Retry.JitterStrategy**: Jitter strategy for retries (ASL added Sept 2023)
 
-#### 9. **WAP Extensions (Not in ASL)**
+#### 9. **Data Management (ASL Standard)**
+WAP uses pure ASL semantics for data management:
+- **Variables by Name**: Variables assigned via `Assign` become top-level variables accessible by name in subsequent states
+  - Example: `Assign: { "count": 5 }` → accessible as `$count` (not `$data.count`)
+- **Context Object**: Runtime context is accessed via `$states.context` (ASL standard)
+  - Contains execution metadata (Id, StartTime, ElapsedTime)
+  - Can include custom fields (e.g., Input, contextFunctions)
+- **State Input/Output Flow**: Primary data management mechanism (ASL standard)
+  - Output of state N becomes input of state N+1
+  - Previous state output available via `$states.output`
+- **No WAP-Specific Data Extensions**: Removed `$data` and `$rootState` to ensure full ASL compliance
+
+**Rationale**: Full ASL compliance ensures compatibility with ASL execution semantics, makes the specification clearer, and enables reuse of ASL documentation and tooling.
+
+#### 10. **WAP Extensions (Not in ASL)**
 - **Serial State**: Sequential execution with break condition (WAP-specific)
 - **DisplayTask**: UI rendering tasks with user interaction (WAP-specific)
 - **Retry.RequireUserConfirmation**: User confirmation before retry (WAP-specific)
-- **$data variable**: Global data object across states (WAP convenience, ASL uses state input/output flow)
-- **$rootState variable**: Root execution context (WAP alternative to ASL's $$ context)
 
 ---
 
@@ -196,21 +216,21 @@ WAP intentionally omits these ASL features:
 // See: https://docs.aws.amazon.com/step-functions/latest/dg/concepts-amazon-states-language.html
 // Examples:
 //   - Static: "high"
-//   - JSONata: "{% $data.filteredCount %}"
+//   - JSONata: "{% $filteredCount %}"
 //   - JSONata with function: "{% $now() %}"
-//   - JSONata with context: "{% $rootState.Input.priority %}"
+//   - JSONata with context: "{% $states.context.Input.priority %}"
 type JSONataExpression = string;
 
 // String or JSONata expression type
 // Can be either:
 // 1. A plain string (static value)
-// 2. A JSONata expression wrapped in {% %} (e.g., "{% $data.filteredTodos %}", "{% $item.id %}")
+// 2. A JSONata expression wrapped in {% %} (e.g., "{% $filteredTodos %}", "{% $item.id %}")
 type StringOrJSONataExpression = string | JSONataExpression
 
 // Number or JSONata expression type
 // Can be either:
 // 1. A plain number (static value)
-// 2. A JSONata expression wrapped in {% %} (e.g., "{% $data.count %}", "{% $index %}")
+// 2. A JSONata expression wrapped in {% %} (e.g., "{% $count %}", "{% $index %}")
 type NumberOrJSONataExpression = number | JSONataExpression
 
 // Root-level plan structure (ASL-compatible with WAP requirements)
@@ -223,19 +243,19 @@ type StateMachine = {
   Version?: string; // OPTIONAL - State machine version (ASL standard, added in WAP)
 }
 
-// Root state - runtime values injected into StateMachine at execution time (not part of StateMachine definition)
-type RootState = {
-  Context: StaticJson; // Runtime context (e.g., time, user info, environment) - @TODO: Create WAP Specific context also maybe include time etc.
-  Input?: StaticJson; // User request input parameters (runtime value, not part of StateMachine definition)
-  contextFunctions?: ContextFunctionRegistry; // Available context functions
-}
+// Execution context - runtime values provided by interpreter (ASL standard)
+// Accessible via $states.context in JSONata expressions
+// The context object is read-only and immutable
+// Custom fields can be added by the interpreter (e.g., Input, contextFunctions)
+// See: https://states-language.net/spec.html#reserved-states-variable-with-jsonata
 
 // Assignable type - states that can have Assign field
 // Any state except Succeed and Fail MAY have an "Assign" field at the state's top level
 // The value of an "Assign" field MUST be a JSON object; it has no required fields
 // The name of each top-level field in the object names a variable to assign, and the field's value provides its new value
+// Variables assigned via Assign become top-level variables accessible by name in subsequent states (ASL standard)
 type Assignable = {
-  Assign?: Assign; // Assign result to data (custom, uses JSONata)
+  Assign?: Assign; // Assign variables (ASL standard, uses JSONata)
 }
 
 // Base state type (matches ASL structure with WAP requirements)
@@ -300,8 +320,9 @@ type Outputs = Value
 // The Assign field accepts a JSON object with key/value pairs that define variable names and their assigned values
 // Any string value, including those inside objects or arrays, will be evaluated as JSONata when surrounded by {% %} characters
 // See: https://docs.aws.amazon.com/step-functions/latest/dg/workflow-variables.html
-// Example: { "foo": "{% $states.input.foo_input %}" } assigns the value from state input to variable foo
-// Example: { "allTodos": "{% $ %}" } assigns the state output to variable allTodos
+// Variables assigned become top-level variables accessible by name in subsequent states (e.g., $foo, $allTodos)
+// Example: { "foo": "{% $states.input.foo_input %}" } assigns the value from state input to variable $foo
+// Example: { "allTodos": "{% $states.result %}" } assigns the state result to variable $allTodos
 type Assign = Record<string, Value> 
 // A JSON array or a JSONata expression that must evaluate to an array. https://docs.aws.amazon.com/step-functions/latest/dg/state-map-inline.html
 type ArrayOrJSONataExpression = Array<Value> | JSONataExpression;
@@ -336,7 +357,7 @@ type BaseTask = ArgumentsReceivingState & OutputEmittingState & NextOrEndStatePr
     TimeoutSeconds?: NumberOrJSONataExpression; // OPTIONAL - Task timeout in seconds (ASL standard, added in WAP)
     HeartbeatSeconds?: NumberOrJSONataExpression; // OPTIONAL - Heartbeat interval in seconds (ASL standard, added in WAP)
     // NOTE: Task.Credentials field intentionally omitted (ASL feature not needed in WAP)
-  // Uses Assign from Assignable to store result in data
+  // Uses Assign from Assignable to assign variables accessible in subsequent states
 }
 
 // ToolTask - executes API calls
@@ -388,7 +409,7 @@ type Choice = BaseState & OutputEmittingState & Assignable & {
 type ChoiceRule = NextStateProgression & OutputEmittingState & Assignable & {
   Comment: string; // REQUIRED in WAP (optional in ASL) - documents conditional logic
   Condition: JSONataExpression; // JSONata expression that evaluates to boolean (matches ASL)
-  // Example: "{% $data.filteredCount = 0 %}"
+  // Example: "{% $filteredCount = 0 %}"
   // When this rule matches, its Output and Assign fields are applied before transitioning to Next
 }
 
@@ -464,7 +485,7 @@ type Parallel = BaseState & ArgumentsReceivingState & OutputEmittingState & Next
 // Executes multiple state machines sequentially (single-threaded), similar to a for loop
 // Unlike Parallel (which uses concurrency/threads), Serial ensures:
 // 1. Step N completes fully before Step N+1 begins
-// 2. Each step can access results from all previous steps via $data
+// 2. Each step can access results from all previous steps via variables (assigned via Assign)
 // 3. Optional BreakCondition allows early termination (like a break statement)
 // 
 // Use cases:
@@ -474,7 +495,7 @@ type Parallel = BaseState & ArgumentsReceivingState & OutputEmittingState & Next
 //
 // The state output is an array containing the output of each executed step (steps after break are not included)
 // Each step receives:
-// - Previous steps' results via $data (accumulated using Assign)
+// - Previous steps' results via variables (assigned via Assign in previous steps)
 // - Index of current step via $index (0-based)
 // - Total number of steps via $stepCount
 type Serial = BaseState & ArgumentsReceivingState & OutputEmittingState & NextOrEndStateProgression & RetryAndCatchState & Assignable & {
@@ -485,7 +506,7 @@ type Serial = BaseState & ArgumentsReceivingState & OutputEmittingState & NextOr
   // If condition evaluates to true, execution stops and proceeds to Next/End state
   // If condition is false or undefined, execution continues to next step
   // If no BreakCondition is provided, all steps execute
-  // Example: "{% $data.totalResults >= 20 or $index >= 4 %}" (stop at 20 results OR 5 tries)
+  // Example: "{% $totalResults >= 20 or $index >= 4 %}" (stop at 20 results OR 5 tries)
   
   // Uses Arguments from base State for initial input to first step
   // Uses Assign from Assignable to accumulate results across steps
@@ -519,8 +540,9 @@ type Catch = Assignable & {
   // States.Permissions catches permission errors
   // Custom error names can be used for application-specific errors
   Next: string; // State to transition to on error (matches ASL)
-  ResultPath?: StringOrJSONataExpression; // JSONata expression for where to store error in data (ASL uses JSONPath, we use JSONata)
-  // Example: "{% $data.error %}" or "{% $.errorInfo %}"
+  ResultPath?: StringOrJSONataExpression; // JSONata expression for variable name to store error (ASL standard)
+  // If specified, the error is stored as a variable accessible by name in the next state
+  // Example: If ResultPath is "error", the error is accessible as $error in the next state
 }
 ```
 
@@ -542,6 +564,7 @@ type Catch = Assignable & {
 **Assign and Output Execution:**
 - Assign and Output steps occur in parallel. If you choose to transform data during variable assignment, that transformed data will not be available in the Output step. You must reapply the JSONata transformation in the Output step.
 - If an "Assign" field is provided, the interpreter first evaluates the new value for each variable, and then performs the assignments. Any variable referenced in an "Assign" field sees its current value as it was when the state was entered, and each variable's new value only takes effect in the next state.
+- Variables assigned via `Assign` become top-level variables accessible by name in subsequent states (e.g., `Assign: { "count": 5 }` → accessible as `$count`).
 
 **Function Signatures:**
 - Functions can be defined with an optional signature which specifies the parameter types of the function. If supplied, the evaluation engine will validate the arguments passed to the function before it is invoked. A dynamic error is thrown if the argument list does not match the signature. https://docs.jsonata.org/programming#function-signatures
@@ -587,46 +610,57 @@ const DEFAULT_CONTEXT_FUNCTIONS: ContextFunctionRegistry = {
 };
 ```
 
-### JSONata Context Variables
+### JSONata Context Variables (ASL Standard)
 
 The execution context provides these variables to JSONata expressions:
 
 ```typescript
 type JSONataContext = {
-  // $ - Root input document (current state input) - ASL STANDARD
-  $: unknown;
-  
-  // $data - Global data object (persistent across all states) - WAP-SPECIFIC
-  // Unlike ASL which uses state input/output flow, WAP provides $data for convenience
-  // Variables assigned via Assign field are stored in $data
-  $data: Record<string, unknown>;
-  
-  // $rootState - Root state runtime values - WAP-SPECIFIC
-  // (Injected at execution time, not part of StateMachine definition)
-  // ASL uses $$ context object instead; $rootState is WAP's alternative
-  $rootState: {
-    Context: StaticJson; // Runtime context (e.g., time, user info)
-    Input?: StaticJson; // User request parameters
-    contextFunctions?: ContextFunctionRegistry; // Available context functions
-  };
-  
   // $states - State execution context - ASL STANDARD
+  // See: https://states-language.net/spec.html#reserved-states-variable-with-jsonata
   $states: {
     input: unknown; // Current state input
-    output: unknown; // Previous state output (if available)
+    result: unknown; // State's result (Task, Map, Parallel, Serial states only)
+    errorOutput: unknown; // Error output (Catch blocks only)
+    context: {
+      // Context object provided by interpreter (read-only, immutable)
+      Execution?: {
+        Id: string; // Execution identifier
+        StartTime: string; // Execution start timestamp
+        ElapsedTime: number; // Elapsed time since start (seconds)
+      };
+      // Custom context fields can be added by interpreter
+      // (e.g., Input, contextFunctions, etc.)
+      [key: string]: unknown;
+    };
   };
+  
+  // Variables assigned via Assign field - ASL STANDARD
+  // Variables become top-level and accessible by name in subsequent states
+  // Example: Assign: { "count": 5 } → accessible as $count
+  // Variables are accessible in all JSONata expressions in subsequent states
   
   // Map context (only available in Map state iterator) - ASL STANDARD
   $item?: unknown; // Current item in map iteration
-  $index?: number; // Current index in map iteration
+  $index?: number; // Current index in map iteration (0-based)
   
-  // Context functions (custom functions registered in plan) - WAP-SPECIFIC
+  // Serial context (only available in Serial state) - WAP EXTENSION
+  $index?: number; // Current step index (0-based)
+  $stepCount?: number; // Total number of steps defined
+  
+  // Context functions (custom functions registered by interpreter) - WAP EXTENSION
   // These are dynamically added from contextFunctions registry
   $now?: () => string;
   $addDays?: (date: string, days: number) => string;
   // ... other context functions from contextFunctions registry
 }
 ```
+
+**Important Notes:**
+- Variables assigned via `Assign` are accessible by name (e.g., `$count`, `$todos`) in subsequent states
+- `$states.context` is read-only and immutable
+- JSONata expressions MUST NOT use `$` or unqualified field names at the top level
+- JSONata expressions MUST NOT use `$$` (ASL restriction)
 
 ---
 
@@ -1299,8 +1333,8 @@ This section documents WAP's alignment with Amazon States Language (ASL) specifi
 | Serial State | Sequential execution with break conditions | Production-ready |
 | DisplayTask | UI rendering with user interaction | Production-ready |
 | Retry.RequireUserConfirmation | User approval before retry | Production-ready |
-| $data context variable | Global state across workflow | Production-ready |
-| $rootState context variable | Access to root execution context | Production-ready |
+
+**Note**: WAP uses pure ASL semantics for data management. Variables assigned via `Assign` are accessible by name (e.g., `$count`) in subsequent states, following ASL standard. Runtime context is accessed via `$states.context` (ASL standard).
 
 ### 📋 ASL Specification Alignment Details
 
@@ -1320,9 +1354,12 @@ This section documents WAP's alignment with Amazon States Language (ASL) specifi
 - **Core State Types**: 100% compliant with ASL JSONata mode
 - **Error Handling**: 100% compliant with ASL
 - **Data Transformation**: 100% compliant with ASL JSONata mode
+- **Data Management**: 100% compliant with ASL standard (variables by name, `$states.context`)
 - **Overall Structure**: 100% compliant with intentional stricter requirements
 
 **Overall Grade**: A+ (Perfect ASL Compliance + Valuable Extensions)
+
+**Data Management Alignment**: WAP uses pure ASL semantics for data management. Variables assigned via `Assign` are accessible by name (e.g., `$count`) in subsequent states, following ASL standard. Runtime context is accessed via `$states.context`. This ensures full compatibility with ASL execution semantics.
 
 ---
 
